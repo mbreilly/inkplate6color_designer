@@ -15,6 +15,7 @@ A browser-based layout designer and matching Arduino firmware for the Soldered I
 
 1. Open `designer/inkplate-designer.html`.
 2. Lay out the screen: drag elements, pick fonts and inks, edit the weekly schedule, and fill in WiFi and OpenWeatherMap settings.
+   Any color setting can also be a mixed color: click the rainbow swatch and use the hue, saturation and lightness sliders. The panel has only seven inks, so a mixed color is drawn as an 8×8 pattern of up to three inks. It looks best on large areas like the background or the schedule panel; small text in a mixed color looks speckled.
 3. In the Gallery tab, add photos. They're fitted to 600 × 448 and dithered to the 7 inks, and the preview shows how they'll look.
 4. You can also import a project saved from the PyPortal designer. Positions, fonts, colors and photos are converted.
 5. Click Export. The zip has the `InkplateDisplay` sketch folder and an `sdcard` folder. Copy the `sdcard` contents to the root of a FAT32 microSD card.
@@ -25,6 +26,8 @@ A browser-based layout designer and matching Arduino firmware for the Soldered I
    `https://raw.githubusercontent.com/SolderedElectronics/Dasduino-Board-Definitions-for-Arduino-IDE/master/package_Dasduino_Boards_index.json`
 2. Install the libraries **InkplateLibrary** (Soldered) and **ArduinoJson** 7.x.
 3. Open `InkplateDisplay/InkplateDisplay.ino`, select **Soldered Inkplate 6COLOR**, and upload.
+
+If your network needs the board's WiFi MAC address, it's on the `MAC:` line of the upload output, and the sketch also prints it to Serial Monitor (115200) on power-up.
 
 The 6COLOR panel has no partial refresh, so each update is a full refresh of about 12 to 15 seconds. The board deep-sleeps and the onboard RTC wakes it a little before each minute so the new minute shows at about :00. Photos rotate on the schedule set in the Slideshow card.
 

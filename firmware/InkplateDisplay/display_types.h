@@ -45,7 +45,7 @@ struct Element
     int16_t x, y;
     uint8_t align;
     const DFont *font;
-    uint8_t color;
+    uint8_t color;       // colors here and below are numbers into PATTERNS in layout.h
     const char *text;    // label text, or the format for date / weather / updated / battery
     const char *pending; // "updated" before the first weather fetch
     // schedule only: one line per entry, days at x, time at x + daysWidth, text at x + timeWidth

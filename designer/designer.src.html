@@ -94,6 +94,16 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
 .inks { display: flex; flex-wrap: wrap; gap: 5px; }
 .inks button { width: 26px; height: 26px; border-radius: 50%; border: 1px solid rgb(0 0 0 / .35); cursor: pointer; padding: 0; box-shadow: inset 0 0 0 2px rgb(255 255 255 / .0); }
 .inks button[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: 2px; }
+.picker { display: grid; gap: 8px; }
+.inks .mixbtn { background: conic-gradient(#e33, #ec3, #3c5, #3ae, #63e, #e3a, #e33); }
+.mix { display: grid; gap: 6px; max-width: 280px; }
+.mix[hidden] { display: none; }
+.mixhead { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.mixswatch { width: 32px; height: 32px; image-rendering: pixelated; border: 1px solid var(--line); border-radius: 4px; }
+.mixhex { font: 12px var(--f-mono); }
+.mix input[type=range] { -webkit-appearance: none; appearance: none; height: 14px; border-radius: 7px; border: 1px solid var(--line); padding: 0; margin: 0; }
+.mix input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 2px solid #333; box-shadow: 0 0 0 1px #fff; }
+.mix input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 2px solid #333; }
 .list { display: grid; gap: 6px; }
 .el-row { display: grid; grid-template-columns: auto auto 1fr auto; align-items: center; gap: 10px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); cursor: pointer; }
 .el-row[aria-current="true"] { border-color: var(--accent); background: var(--accent-soft); }
@@ -155,7 +165,7 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
         </div>
       </div>
       <div class="bar" aria-hidden="true"><i id="progress"></i></div>
-      <p class="status" style="margin:0">The preview uses the same bitmap fonts and the same seven inks the Inkplate will. Photos are dithered to those inks. Play rotation runs one minute per second and shows the full-screen refresh flash at each change.</p>
+      <p class="status" style="margin:0">The preview uses the same bitmap fonts and the same seven inks the Inkplate will. Photos are dithered to those inks, and mixed colors (the rainbow swatch) are drawn as fine patterns of them, exactly as the screen will. Play rotation runs one minute per second and shows the full-screen refresh flash at each change.</p>
     </div>
 
     <div class="right">
@@ -343,6 +353,63 @@ const INKS = [
 const inkOf = (id) => INKS.find((i) => i.id === id) || INKS[0];
 const inkRGB = (id) => inkOf(id).rgb;
 const inkCss = (id) => `rgb(${inkRGB(id).join(",")})`;
+// A color setting is either an ink id ("blue") or a mixed color ("#3a6ea5").
+// Mixed colors are drawn as an 8x8 pattern of inks, the same on the preview
+// and on the device (the export writes the patterns into layout.h).
+const isMix = (v) => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v);
+const colorRGB = (v) => isMix(v) ? [1, 3, 5].map((i) => parseInt(v.slice(i, i + 2), 16)) : inkRGB(v);
+const colorCss = (v) => `rgb(${colorRGB(v).join(",")})`;
+const hexOf = (rgb) => "#" + rgb.map((c) => clamp(Math.round(c), 0, 255).toString(16).padStart(2, "0")).join("");
+// Ordered-dither thresholds, 0-63, indexed y * 8 + x.
+const BAYER8 = Array.from({ length: 64 }, (_, i) => {
+  const x = i & 7, y = i >> 3; let v = 0;
+  for (let b = 0; b < 3; b++) v |= ((((x >> b) ^ (y >> b)) & 1) << 1 | (y >> b) & 1) << (4 - 2 * b);
+  return v;
+});
+const patternCache = new Map();
+// Ink numbers for the 64 pixels of a color's 8x8 tile. Tries every mix of up to three inks
+// (in 64ths for one or two inks, 16ths for three) and keeps the one whose average comes
+// closest, with a small charge per extra ink so a near-solid color stays solid and greys
+// use black and white. The picks are laid out darkest to lightest along the Bayer
+// thresholds so the mix looks even.
+const MIX_EXTRA_INK = 150;
+function inkDist(a, b) {
+  const rm = (a[0] + b[0]) / 2, dr = a[0] - b[0], dg = a[1] - b[1], db = a[2] - b[2];
+  return (2 + rm / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rm) / 256) * db * db;
+}
+function bestMix(rgb) {
+  let best = null, bestCost = Infinity;
+  const consider = (inks, counts) => {
+    const m = [0, 1, 2].map((q) => inks.reduce((sum, n, i) => sum + counts[i] * INKS[n].rgb[q], 0) / 64);
+    const cost = inkDist(m, rgb) + MIX_EXTRA_INK * (inks.length - 1);
+    if (cost < bestCost) { bestCost = cost; best = { inks, counts }; }
+  };
+  for (let a = 0; a < INKS.length; a++) {
+    consider([a], [64]);
+    for (let b = a + 1; b < INKS.length; b++) {
+      for (let i = 1; i < 64; i++) consider([a, b], [i, 64 - i]);
+      for (let c = b + 1; c < INKS.length; c++)
+        for (let i = 4; i < 64; i += 4) for (let j = 4; i + j < 64; j += 4) consider([a, b, c], [i, j, 64 - i - j]);
+    }
+  }
+  return best;
+}
+function patternOf(v) {
+  const key = isMix(v) ? v.toLowerCase() : inkOf(v).id;
+  let pat = patternCache.get(key);
+  if (pat) return pat;
+  pat = new Uint8Array(64);
+  if (!isMix(v)) pat.fill(inkOf(v).n);
+  else {
+    const { inks, counts } = bestMix(colorRGB(v)), picks = [];
+    inks.forEach((n, i) => { for (let k = 0; k < counts[i]; k++) picks.push(n); });
+    const lum = (n) => { const p = INKS[n].rgb; return 299 * p[0] + 587 * p[1] + 114 * p[2]; };
+    picks.sort((a, b) => lum(a) - lum(b) || a - b);
+    for (let i = 0; i < 64; i++) pat[i] = picks[BAYER8[i]];
+  }
+  patternCache.set(key, pat);
+  return pat;
+}
 const ANCHOR = { left: 0, center: 0.5, right: 1 };
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -598,7 +665,7 @@ async function ditheredNow(src) {
 function fitImage(source, fit, fillInk) {
   const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
   const cx = cv.getContext("2d");
-  cx.fillStyle = inkCss(fillInk); cx.fillRect(0, 0, W, H);
+  cx.fillStyle = colorCss(fillInk); cx.fillRect(0, 0, W, H);
   const sw = source.naturalWidth || source.width, sh = source.naturalHeight || source.height;
   const scale = fit === "contain" ? Math.min(W / sw, H / sh) : Math.max(W / sw, H / sh);
   const dw = sw * scale, dh = sh * scale;
@@ -635,11 +702,15 @@ function sampleImages() {
 /* ------------------------------------------------------------ rendering */
 const stage = $("#stage"), sctx = stage.getContext("2d");
 const frame = sctx.createImageData(W, H);
-function fillRect(buf, x, y, w, h, rgb) {
+// pat is a color's 8x8 ink pattern (patternOf), tiled from the screen's top-left like the firmware does.
+function fillRect(buf, x, y, w, h, pat) {
   const x0 = Math.max(0, x), y0 = Math.max(0, y), x1 = Math.min(W, x + w), y1 = Math.min(H, y + h);
-  for (let yy = y0; yy < y1; yy++) for (let xx = x0; xx < x1; xx++) { const i = (yy * W + xx) * 4; buf[i] = rgb[0]; buf[i + 1] = rgb[1]; buf[i + 2] = rgb[2]; buf[i + 3] = 255; }
+  for (let yy = y0; yy < y1; yy++) for (let xx = x0; xx < x1; xx++) {
+    const rgb = INKS[pat[(yy & 7) * 8 + (xx & 7)]].rgb, i = (yy * W + xx) * 4;
+    buf[i] = rgb[0]; buf[i + 1] = rgb[1]; buf[i + 2] = rgb[2]; buf[i + 3] = 255;
+  }
 }
-function drawText(buf, font, text, x, y, align, rgb) {
+function drawText(buf, font, text, x, y, align, pat) {
   ensureFont(font);
   // Same widths and rounding as the firmware's drawText()
   const r = raster(font), w = labelWidth(r, text), left = x - (align === "center" ? Math.floor(w / 2) : align === "right" ? w : 0), base = y + r.ascent;
@@ -650,7 +721,7 @@ function drawText(buf, font, text, x, y, align, rgb) {
       if (!g.bits[yy * g.w + xx]) continue;
       const px = pen + g.xoff + xx, py = base - g.yoff - g.h + yy;
       if (px < 0 || py < 0 || px >= W || py >= H) continue;
-      const i = (py * W + px) * 4; buf[i] = rgb[0]; buf[i + 1] = rgb[1]; buf[i + 2] = rgb[2];
+      const rgb = INKS[pat[(py & 7) * 8 + (px & 7)]].rgb, i = (py * W + px) * 4; buf[i] = rgb[0]; buf[i + 1] = rgb[1]; buf[i + 2] = rgb[2];
     }
     pen += g.adv;
   }
@@ -683,17 +754,17 @@ function scheduleLines(el, now) {
 function drawElement(buf, el, now) {
   if (el.type === "schedule") {
     const bh = boxHeight(el), pad = Number(el.boxPad || 0);
-    if (el.box) fillRect(buf, el.x - pad, el.y - pad, el.width + 2 * pad, bh + 2 * pad, inkRGB(el.boxColor));
+    if (el.box) fillRect(buf, el.x - pad, el.y - pad, el.width + 2 * pad, bh + 2 * pad, patternOf(el.boxColor));
     const r = raster(el.font), rh = rowHeight(el);
     scheduleLines(el, now).forEach((e, i) => {
       const hot = el.highlight && e.hot, y = el.y + i * rh;
-      drawText(buf, el.font, e.days, el.x, y, "left", inkRGB(hot ? el.highlightColor : el.timeColor));
-      drawText(buf, el.font, e.when, el.x + Number(el.daysWidth), y, "left", inkRGB(hot ? el.highlightColor : el.timeColor));
-      drawText(buf, el.font, fitText(r, e.what, el.width - el.timeWidth), el.x + Number(el.timeWidth), y, "left", inkRGB(hot ? el.highlightColor : el.color));
+      drawText(buf, el.font, e.days, el.x, y, "left", patternOf(hot ? el.highlightColor : el.timeColor));
+      drawText(buf, el.font, e.when, el.x + Number(el.daysWidth), y, "left", patternOf(hot ? el.highlightColor : el.timeColor));
+      drawText(buf, el.font, fitText(r, e.what, el.width - el.timeWidth), el.x + Number(el.timeWidth), y, "left", patternOf(hot ? el.highlightColor : el.color));
     });
     return { x: el.x, y: el.y, w: el.width, h: Math.max(bh, 6) };
   }
-  return drawText(buf, el.font, elText(el, now), el.x, el.y, el.align, inkRGB(el.color));
+  return drawText(buf, el.font, elText(el, now), el.x, el.y, el.align, patternOf(el.color));
 }
 let playState = null;
 let flash = null; // { start } while the preview shows a refresh flash
@@ -709,7 +780,7 @@ function render() {
   boxes = {};
   if (flash) {
     const k = Math.floor((performance.now() - flash.start) / 110);
-    if (k < FLASH_SEQ.length) { fillRect(buf, 0, 0, W, H, inkRGB(FLASH_SEQ[k])); sctx.putImageData(frame, 0, 0); $("#sel").hidden = true; return; }
+    if (k < FLASH_SEQ.length) { fillRect(buf, 0, 0, W, H, patternOf(FLASH_SEQ[k])); sctx.putImageData(frame, 0, 0); $("#sel").hidden = true; return; }
     flash = null;
   }
   let base = null, src = null;
@@ -717,14 +788,14 @@ function render() {
   else { const im = activePhotos()[scr.index]; src = im ? im.src : null; }
   if (src) { const d = dithered(src); base = d ? d.image : null; }
   if (base) buf.set(base.data);
-  else fillRect(buf, 0, 0, W, H, inkRGB(scr.kind === "main" ? S.background.ink : S.gallery.fill));
+  else fillRect(buf, 0, 0, W, H, patternOf(scr.kind === "main" ? S.background.ink : S.gallery.fill));
   if (scr.kind === "main") {
     for (const el of S.elements) if (el.visible) boxes[el.id] = drawElement(buf, el, now);
   } else {
     const ov = S.gallery.overlay;
-    if (!S.gallery.enabled) drawText(buf, { family: "sans", size: 26, weight: 400 }, "The slideshow is off", 300, 210, "center", inkRGB("blue"));
-    else if (!S.gallery.images.length) drawText(buf, { family: "sans", size: 26, weight: 400 }, "Add photos in the Gallery tab", 300, 210, "center", inkRGB("blue"));
-    else if (!base) drawText(buf, { family: "sans", size: 22, weight: 400 }, "Dithering…", 300, 210, "center", inkRGB("blue"));
+    if (!S.gallery.enabled) drawText(buf, { family: "sans", size: 26, weight: 400 }, "The slideshow is off", 300, 210, "center", patternOf("blue"));
+    else if (!S.gallery.images.length) drawText(buf, { family: "sans", size: 26, weight: 400 }, "Add photos in the Gallery tab", 300, 210, "center", patternOf("blue"));
+    else if (!base) drawText(buf, { family: "sans", size: 22, weight: 400 }, "Dithering…", 300, 210, "center", patternOf("blue"));
     if (ov.visible) boxes.overlay = drawElement(buf, ov, now);
   }
   sctx.putImageData(frame, 0, 0);
@@ -810,16 +881,69 @@ function num(obj, key, min, max, after, xy) {
   if (xy) { i.dataset.xy = obj.id; i.dataset.key = key; }
   return i;
 }
-// A row of the seven ink swatches.
-function inkPicker(obj, key, after, idBase) {
-  const row = h("div", { class: "inks", role: "group", "aria-label": "Ink" });
-  for (const ink of INKS) {
-    const b = h("button", { type: "button", id: `${idBase || "p-" + (obj.id || "x")}-${key}-${ink.id}`, title: ink.name, "aria-label": ink.name,
-      "aria-pressed": String(obj[key] === ink.id), style: `background:${inkCss(ink.id)}`,
-      onclick: () => { obj[key] = ink.id; row.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); changed(after || "list"); } });
-    row.append(b);
+// HSL (0-360, 0-100, 0-100) to and from RGB, for the color sliders.
+function hslToRgb(hh, ss, ll) {
+  const sat = ss / 100, l = ll / 100, a = sat * Math.min(l, 1 - l);
+  const f = (n) => { const k = (n + hh / 30) % 12; return 255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))); };
+  return [f(0), f(8), f(4)];
+}
+function rgbToHsl([r, g, b]) {
+  r /= 255; g /= 255; b /= 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+  let hh = 0, sat = 0;
+  if (d) {
+    sat = d / (1 - Math.abs(2 * l - 1));
+    hh = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    hh = (hh * 60 + 360) % 360;
   }
-  return row;
+  return [Math.round(hh), Math.round(sat * 100), Math.round(l * 100)];
+}
+// The seven ink swatches, plus a "Mix" swatch that opens hue / saturation / lightness
+// sliders for any color. Mixed colors show as the ink pattern the screen will draw.
+function inkPicker(obj, key, after, idBase) {
+  const base = `${idBase || "p-" + (obj.id || "x")}-${key}`;
+  const wrap = h("div", { class: "picker" });
+  const row = h("div", { class: "inks", role: "group", "aria-label": "Color" });
+  const mixBtn = h("button", { type: "button", class: "mixbtn", id: `${base}-mix`, title: "Mix a color", "aria-label": "Mix a color" });
+  const panel = h("div", { class: "mix" });
+  const swatch = h("canvas", { width: 16, height: 16, class: "mixswatch", "aria-hidden": "true" });
+  const hexLabel = h("code", { class: "mixhex" });
+  let hsl = rgbToHsl(colorRGB(obj[key]));
+  const sliders = [["Hue", 360], ["Saturation", 100], ["Lightness", 100]].map(([label, max], i) => {
+    const r = h("input", { type: "range", min: 0, max, step: 1, id: `${base}-${label.toLowerCase()}`, "aria-label": label, value: hsl[i],
+      oninput: () => { hsl[i] = Number(r.value); obj[key] = hexOf(hslToRgb(...hsl)); sync(); render(); save(); },
+      onchange: () => changed(after || "list") });
+    return r;
+  });
+  function paintSliders() {
+    const [hh, ss, ll] = hsl;
+    sliders[0].style.background = `linear-gradient(to right, ${[0, 60, 120, 180, 240, 300, 360].map((d) => `hsl(${d} ${ss}% ${ll}%)`).join(",")})`;
+    sliders[1].style.background = `linear-gradient(to right, hsl(${hh} 0% ${ll}%), hsl(${hh} 100% ${ll}%))`;
+    sliders[2].style.background = `linear-gradient(to right, #000, hsl(${hh} ${ss}% 50%), #fff)`;
+  }
+  function sync() {
+    const v = obj[key], mixed = isMix(v);
+    row.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b === mixBtn ? mixed : !mixed && b.dataset.ink === v)));
+    panel.hidden = !mixed;
+    const pat = patternOf(v), cx = swatch.getContext("2d"), img = cx.createImageData(16, 16);
+    for (let i = 0; i < 256; i++) { const p = INKS[pat[((i >> 4) & 7) * 8 + (i & 7)]].rgb; img.data.set([p[0], p[1], p[2], 255], i * 4); }
+    cx.putImageData(img, 0, 0);
+    hexLabel.textContent = mixed ? v : inkOf(v).name;
+    paintSliders();
+  }
+  for (const ink of INKS) {
+    row.append(h("button", { type: "button", id: `${base}-${ink.id}`, title: ink.name, "aria-label": ink.name, "data-ink": ink.id, style: `background:${inkCss(ink.id)}`,
+      onclick: () => { obj[key] = ink.id; hsl = rgbToHsl(ink.rgb); sliders.forEach((r, i) => r.value = hsl[i]); sync(); changed(after || "list"); } }));
+  }
+  mixBtn.onclick = () => {
+    if (!isMix(obj[key])) obj[key] = hexOf(colorRGB(obj[key]));
+    sync(); changed(after || "list");
+  };
+  row.append(mixBtn);
+  panel.append(h("div", { class: "mixhead" }, swatch, h("span", {}, "On screen: "), hexLabel), ...sliders);
+  wrap.append(row, panel);
+  sync();
+  return wrap;
 }
 function text(obj, key, after) { const i = h("input", { type: "text", id: `p-${obj.id}-${key}`, value: obj[key] || "", oninput: () => { obj[key] = i.value; changed(after); } }); return i; }
 function fontFields(el) {
@@ -923,7 +1047,7 @@ function renderLists() {
     vis.checked = el.visible;
     list.append(h("div", { class: "el-row", "aria-current": String(el.id === selected), tabindex: 0,
       onclick: () => select(el.id), onkeydown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(el.id); } } },
-      vis, h("span", { class: "dot", style: `background:${inkCss(el.color)}` }), h("span", {}, el.name), h("span", { class: "chip" }, TYPE_LABEL[el.type])));
+      vis, h("span", { class: "dot", style: `background:${colorCss(el.color)}` }), h("span", {}, el.name), h("span", { class: "chip" }, TYPE_LABEL[el.type])));
   }
   // schedule
   const sl = $("#sched-list"); sl.innerHTML = "";
@@ -1211,8 +1335,22 @@ function usedFonts() {
 }
 const ELTYPE = { clock: "EL_CLOCK", date: "EL_DATE", temp: "EL_TEMP", updated: "EL_UPDATED", text: "EL_TEXT", schedule: "EL_SCHEDULE", battery: "EL_BATTERY" };
 const ALIGN = { left: "AL_LEFT", center: "AL_CENTER", right: "AL_RIGHT" };
-function elementC(e) {
-  const ink = (id) => inkOf(id).c, sch = e.type === "schedule";
+// Color numbers in layout.h: 0-6 are the solid inks (same numbers as INKPLATE_*), mixed
+// colors follow from 7. Each number picks an 8x8 pattern from PATTERNS.
+function colorTable() {
+  const mixes = [];
+  const c = (v) => {
+    if (!isMix(v)) return inkOf(v).c;
+    const k = v.toLowerCase(); let i = mixes.indexOf(k);
+    if (i < 0) { mixes.push(k); i = mixes.length - 1; }
+    return String(INKS.length + i);
+  };
+  const patternsC = () => [...INKS.map((ink) => [ink.id, ink.name]), ...mixes.map((m) => [m, m])]
+    .map(([v, name]) => `    {${[...patternOf(v)].join(",")}}, // ${name}`).join("\n");
+  return { c, patternsC };
+}
+function elementC(e, ink) {
+  const sch = e.type === "schedule";
   const txt = e.type === "text" ? e.text : (e.format ?? "");
   return `    {${ELTYPE[e.type]}, ${e.x}, ${e.y}, ${ALIGN[e.align || "left"]}, &${fontIdent(e.font)}, ${ink(e.color)}, ${cstr(txt)}, ${cstr(e.pending ?? "")},\n` +
     `     ${sch ? ink(e.timeColor) : 0}, ${sch ? ink(e.highlightColor) : 0}, ${sch ? e.rows : 0}, ${sch ? rowHeight(e) : 0}, ${sch ? Number(e.daysWidth) : 0}, ${sch ? Number(e.timeWidth) : 0}, ${sch ? e.width : 0}, ` +
@@ -1226,6 +1364,10 @@ function layoutH() {
   const photos = activePhotos().map((im, i) => ({ file: `/gallery/photo${String(i + 1).padStart(2, "0")}.bin`, minutes: photoMinutes(im) }));
   const ov = S.gallery.overlay, ovVisible = !!(ov.visible && photos.length);
   const ovFont = ovVisible ? ov.font : (usedFonts()[0] || ov.font);
+  const colors = colorTable(), ink = colors.c;
+  const elementsC = els.map((e) => elementC(e, ink)).join("\n");
+  const overlayC = elementC({ ...ov, font: ovFont, type: "clock", name: "Clock over photos" }, ink).replace(/,( \/\/.*)$/, ";$1");
+  const bgC = ink(S.background.ink), fillC = ink(S.gallery.fill);
   return `// Layout made by Inkplate 6COLOR Designer, ${new Date().toLocaleString()}.
 // Export again from the designer to change it.
 #pragma once
@@ -1235,12 +1377,17 @@ function layoutH() {
 #define WEATHER_UNITS ${cstr(S.weather.units)}
 static const uint16_t MAIN_MINUTES = ${S.timing.mainMinutes};
 static const uint16_t WEATHER_MINUTES = ${S.timing.weatherMinutes};
-static const uint8_t BG_INK = ${inkOf(S.background.ink).c};
+static const uint8_t BG_INK = ${bgC};
 static const char *const BG_IMAGE = ${S.background.image ? '"/bg.bin"' : "nullptr"};
-static const uint8_t GALLERY_FILL = ${inkOf(S.gallery.fill).c};
+static const uint8_t GALLERY_FILL = ${fillC};
+
+// Every color is an 8x8 tile of ink numbers, repeated across the screen.
+static const uint8_t PATTERNS[][64] = {
+${colors.patternsC()}
+};
 
 static const Element ELEMENTS[] = {
-${els.map(elementC).join("\n") || "    {EL_TEXT, 0, 0, AL_LEFT, &" + fontIdent(ovFont) + ", 0, \"\", \"\", 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, false},"}
+${elementsC || "    {EL_TEXT, 0, 0, AL_LEFT, &" + fontIdent(ovFont) + ", 0, \"\", \"\", 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, false},"}
 };
 static const int ELEMENT_COUNT = ${els.length};
 
@@ -1256,7 +1403,7 @@ static const int PHOTO_COUNT = ${photos.length};
 
 static const bool OVERLAY_VISIBLE = ${ovVisible ? "true" : "false"};
 static const Element OVERLAY =
-${elementC({ ...ov, font: ovFont, type: "clock", name: "Clock over photos" }).replace(/,( \/\/.*)$/, ";$1")}
+${overlayC}
 `;
 }
 function fontsH(fonts) {

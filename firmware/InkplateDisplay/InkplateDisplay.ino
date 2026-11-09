@@ -51,6 +51,21 @@ RTC_DATA_ATTR uint32_t leadMs[2] = {15000, 17000}; // wake -> refresh done, for 
 
 // ---------------------------------------------------------------- text
 
+// Colors are numbers into PATTERNS (layout.h): an 8x8 tile of inks, repeated
+// from the screen's top-left. 0-6 are the solid inks, mixed colors follow.
+inline uint8_t inkAt(uint8_t color, int x, int y)
+{
+    return PATTERNS[color][(y & 7) * 8 + (x & 7)];
+}
+
+void fillColor(int x, int y, int w, int h, uint8_t color)
+{
+    int x0 = x < 0 ? 0 : x, y0 = y < 0 ? 0 : y, x1 = x + w > W ? W : x + w, y1 = y + h > H ? H : y + h;
+    for (int yy = y0; yy < y1; yy++)
+        for (int xx = x0; xx < x1; xx++)
+            display.drawPixel(xx, yy, inkAt(color, xx, yy));
+}
+
 const DGlyph &glyphOf(const DFont *f, char ch)
 {
     uint8_t c = (uint8_t)ch;
@@ -99,7 +114,11 @@ void drawText(const DFont *f, const char *s, int x, int y, uint8_t align, uint8_
         for (int yy = 0; yy < g.h; yy++)
             for (int xx = 0; xx < g.w; xx++, i++)
                 if (bits[i >> 3] & (0x80 >> (i & 7)))
-                    display.drawPixel(pen + g.xoff + xx, top + yy, color);
+                {
+                    int px = pen + g.xoff + xx, py = top + yy;
+                    if (px >= 0 && py >= 0 && px < W && py < H)
+                        display.drawPixel(px, py, inkAt(color, px, py));
+                }
         pen += g.adv;
     }
 }
@@ -244,8 +263,8 @@ void shortTime(char *out, size_t n, int minute)
 void drawSchedule(const Element &el, const struct tm &now)
 {
     if (el.box)
-        display.fillRect(el.x - el.boxPad, el.y - el.boxPad, el.width + 2 * el.boxPad, el.boxHeight + 2 * el.boxPad,
-                         el.boxColor);
+        fillColor(el.x - el.boxPad, el.y - el.boxPad, el.width + 2 * el.boxPad, el.boxHeight + 2 * el.boxPad,
+                  el.boxColor);
     static const char DAY_LETTERS[] = "MTWTFSS";
     int wday = (now.tm_wday + 6) % 7; // 0 = Monday
     int nowMin = now.tm_hour * 60 + now.tm_min;
@@ -357,7 +376,7 @@ void drawMain(const struct tm &now)
 {
     display.clearDisplay();
     if (BG_INK != INKPLATE_WHITE)
-        display.fillRect(0, 0, W, H, BG_INK);
+        fillColor(0, 0, W, H, BG_INK);
     if (BG_IMAGE)
         drawImageFile(BG_IMAGE);
     for (int i = 0; i < ELEMENT_COUNT; i++)
@@ -369,7 +388,7 @@ bool drawPhoto(int index, const struct tm &now)
 {
     display.clearDisplay();
     if (GALLERY_FILL != INKPLATE_WHITE)
-        display.fillRect(0, 0, W, H, GALLERY_FILL);
+        fillColor(0, 0, W, H, GALLERY_FILL);
     if (!drawImageFile(PHOTOS[index].file))
         return false;
     if (OVERLAY_VISIBLE)
@@ -537,6 +556,12 @@ void setup()
 
     bool woke = esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0;
     bool onlineFirst = !woke || !display.rtc.isSet();
+    if (!woke)
+    {
+        uint64_t mac = ESP.getEfuseMac(); // the WiFi station address; first byte is the lowest
+        Serial.printf("WiFi MAC address: %02x:%02x:%02x:%02x:%02x:%02x\n", (int)(mac & 0xff), (int)(mac >> 8 & 0xff),
+                      (int)(mac >> 16 & 0xff), (int)(mac >> 24 & 0xff), (int)(mac >> 32 & 0xff), (int)(mac >> 40 & 0xff));
+    }
 
     // Power-up: get the time (and weather) before the first draw.
     if (onlineFirst && !goOnline())
