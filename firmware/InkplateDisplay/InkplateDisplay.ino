@@ -51,6 +51,7 @@ RTC_DATA_ATTR Weather wx;
 RTC_DATA_ATTR uint32_t leadMs[2] = {15000, 17000}; // wake -> refresh done, for [main screen, photo]
 RTC_DATA_ATTR uint32_t nextScheduleUtc = 0;        // next read of SCHEDULE_URL
 RTC_DATA_ATTR bool scheduleError = false;          // the last read of SCHEDULE_URL failed
+RTC_DATA_ATTR bool wifiOk = false;                 // the last WiFi connection worked (for the WiFi icon)
 
 // Schedule read from SCHEDULE_URL, already cleaned to printable ASCII (cleanScheduleText).
 // The last good copy is kept in flash (loadSchedule / fetchSchedule), so it survives
@@ -514,6 +515,18 @@ void drawElement(const Element &el, const struct tm &now)
     case EL_BATTERY:
         fill(buf, sizeof(buf), el.text, batteryToken, now);
         break;
+    case EL_WIFI:
+    {
+        // 1-bit icon from layout.h, rows padded to whole bytes.
+        const uint8_t *bits = wifiOk ? WIFI_ON_BITS : WIFI_OFF_BITS;
+        uint8_t ink = wifiOk ? el.color : el.highlightColor;
+        int s = WIFI_ICON_SIZE, stride = (s + 7) / 8;
+        for (int j = 0; j < s; j++)
+            for (int i = 0; i < s; i++)
+                if (bits[j * stride + i / 8] & (0x80 >> (i & 7)))
+                    display.drawPixel(el.x + i, el.y + j, inkAt(ink, el.x + i, el.y + j));
+        return;
+    }
     default:
         snprintf(buf, sizeof(buf), "%s", el.text);
     }
@@ -751,7 +764,10 @@ bool scheduleDue()
 bool goOnline(bool first)
 {
     if (!strlen(WIFI_SSID))
+    {
+        wifiOk = false;
         return display.rtc.isSet();
+    }
 
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -761,6 +777,7 @@ bool goOnline(bool first)
     if (WiFi.status() != WL_CONNECTED)
     {
         Serial.println("WiFi failed");
+        wifiOk = false;
         WiFi.mode(WIFI_OFF);
         uint32_t now = display.rtc.getEpoch();
         if (first || now >= nextFetchUtc)
@@ -770,6 +787,7 @@ bool goOnline(bool first)
         return display.rtc.isSet();
     }
 
+    wifiOk = true;
     if (first || display.rtc.getEpoch() >= nextFetchUtc)
     {
         // NTP gives UTC; the RTC keeps UTC and the zone offset is applied when drawing.
@@ -880,10 +898,18 @@ void setup()
     if (!onlineFirst && (display.rtc.getEpoch() >= nextFetchUtc || scheduleDue()))
         goOnline(false);
 
-    // Next change: every minute on the main screen or a photo with the clock
-    // over it; otherwise when this photo's time is up.
-    bool everyMinute = screen < 0 || OVERLAY_VISIBLE;
-    uint32_t nextMinute = everyMinute ? minute + 1 : segEnd;
+    // Next change: on the main screen or a photo with the clock over it, the
+    // next multiple of UPDATE_MINUTES (or the end of this stretch, if sooner);
+    // otherwise when this photo's time is up. Each update is a full refresh.
+    bool clockShown = screen < 0 || OVERLAY_VISIBLE;
+    uint32_t step = UPDATE_MINUTES ? UPDATE_MINUTES : 1;
+    uint32_t nextMinute = segEnd;
+    if (clockShown)
+    {
+        nextMinute = (minute / step + 1) * step;
+        if (PHOTO_COUNT > 0 && segEnd > minute && segEnd < nextMinute)
+            nextMinute = segEnd;
+    }
     uint32_t dummy;
     int nextScreen = screenAt(nextMinute, &dummy);
     uint32_t wake = nextMinute * 60 - tzOffset - leadSec(nextScreen);

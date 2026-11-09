@@ -263,7 +263,10 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
             <label class="check"><input type="checkbox" id="h24"> 24-hour time</label>
             <label class="check"><input type="checkbox" id="ampm"> Show AM / PM</label>
           </div>
-          <p class="note">The screen updates once a minute. Each update is a full refresh of about 12–15 seconds; the device wakes early so the new minute shows up on time.</p>
+          <div class="fields">
+            <label class="field"><span>Redraw the clock every</span><select id="t-update"><option value="1">1 minute</option><option value="2">2 minutes</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option></select></label>
+          </div>
+          <p class="note">The 6COLOR panel can only redraw the whole screen: each update is a full refresh of about 12–15 seconds with flashing, even when only the time changed. Redrawing less often means less flashing and longer battery life. The clock then changes on the hour and every N minutes after (with 5 minutes: 10:00, 10:05, 10:10…), and the device wakes early so each change shows up on time. Weather and schedule changes show at the next redraw.</p>
         </div>
         <div class="card">
           <h2>Weather inks</h2>
@@ -288,6 +291,7 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
             <label class="field"><span>Humidity %</span><input type="number" id="s-hum"></label>
             <label class="field"><span>City</span><input type="text" id="s-city"></label>
             <label class="field"><span>Battery volts</span><input type="number" id="s-volts" step="0.01"></label>
+            <label class="check"><input type="checkbox" id="s-wifi"> WiFi connected</label>
           </div>
         </div>
       </section>
@@ -425,7 +429,7 @@ const ANCHOR = { left: 0, center: 0.5, right: 1 };
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const CODES = []; for (let c = 32; c < 127; c++) CODES.push(c); CODES.push(176); // 176 (°) is stored as code 127
-const TYPE_LABEL = { clock: "clock", date: "date", temp: "weather", updated: "updated", schedule: "schedule", text: "text", battery: "battery" };
+const TYPE_LABEL = { clock: "clock", date: "date", temp: "weather", updated: "updated", schedule: "schedule", text: "text", battery: "battery", wifi: "wifi" };
 
 /* ------------------------------------------------------------ state */
 const SAMPLE_SCHEDULE_TEXT = `# Lines starting with # are left out
@@ -437,7 +441,7 @@ Next week | Conference in Chicago
 `;
 function exampleState() {
   return {
-    v: 5,
+    v: 6,
     previewDay: "",
     background: { ink: "white", image: null, imageName: "" },
     time: { hour24: false, ampm: true },
@@ -451,6 +455,7 @@ function exampleState() {
         timeColor: "blue", highlightColor: "red", rows: 5, rowGap: 10, daysWidth: 112, timeWidth: 240, width: 544, box: false, boxColor: "yellow", boxPad: 8, highlight: true },
       { id: "email", type: "text", name: "Email", x: 24, y: 418, align: "left", font: { family: "sans", size: 18, weight: 400 }, color: "blue", visible: true, text: "email : mbreilly@hep.upenn.edu" },
       { id: "batt", type: "battery", name: "Battery", x: 300, y: 418, align: "center", font: { family: "sans", size: 18, weight: 400 }, color: "black", visible: false, format: "{volts} V" },
+      { id: "wifi", type: "wifi", name: "WiFi status", x: 404, y: 414, size: 24, color: "black", offColor: "red", visible: true },
       { id: "updated", type: "updated", name: "Last updated", x: 576, y: 418, align: "right", font: { family: "sans", size: 18, weight: 400 }, color: "black", visible: true, format: "Updated {time}", pending: "Updating..." },
     ],
     schedule: { source: "manual", url: "", refreshMinutes: 15, previewText: SAMPLE_SCHEDULE_TEXT, entries: [
@@ -461,9 +466,9 @@ function exampleState() {
     ] },
     gallery: { enabled: true, images: [], defaultMinutes: 2, fit: "cover", fill: "white", dither: "fs", boost: 1.25,
       overlay: { id: "overlay", type: "clock", name: "Clock over photos", x: 576, y: 384, align: "right", font: { family: "sans", size: 40, weight: 700 }, color: "white", visible: true } },
-    timing: { mainMinutes: 10, weatherMinutes: 10 },
+    timing: { mainMinutes: 10, weatherMinutes: 10, updateMinutes: 5 },
     weather: { zip: "19104", country: "US", units: "imperial", offsetHours: -4 },
-    sample: { temp: 68, desc: "Partly cloudy", humidity: 54, city: "Philadelphia", volts: 4.05 },
+    sample: { temp: 68, desc: "Partly cloudy", humidity: 54, city: "Philadelphia", volts: 4.05, wifi: true },
   };
 }
 let S = exampleState();
@@ -583,7 +588,7 @@ const toMin = (t) => { const [h, m] = String(t || "0:0").split(":").map(Number);
 function elText(el, now) {
   const h24 = S.time.hour24, ampm = S.time.ampm;
   switch (el.type) {
-    case "clock": return fmtTime(now.getHours(), now.getMinutes(), h24, ampm);
+    case "clock": { const m = now.getMinutes(); return fmtTime(now.getHours(), m - m % updateMinutes(), h24, ampm); }
     case "date": return fill(el.format, dateValues(now));
     case "temp": return fill(el.format, weatherValues());
     case "battery": return fill(el.format, { volts: (Number(S.sample.volts) || 0).toFixed(2) });
@@ -797,7 +802,38 @@ function scheduleLines(el, now) {
     return { days, when, what, hot, layout: "manual" };
   });
 }
+// How often the device redraws; the clock shows the last multiple of it.
+const updateMinutes = () => [1, 2, 5, 10, 15, 30].includes(Number(S.timing.updateMinutes)) ? Number(S.timing.updateMinutes) : 1;
+// WiFi icon, size x size, one byte per pixel (1 = ink). "Off" adds a slash.
+// The bits are exported to layout.h, so the device draws exactly these pixels.
+const wifiCache = new Map();
+function wifiBits(size, on) {
+  const key = size + (on ? "on" : "off");
+  if (wifiCache.has(key)) return wifiCache.get(key);
+  const c = document.createElement("canvas"); c.width = c.height = size;
+  const g = c.getContext("2d"), s = size, lw = Math.max(1.5, s * 0.11), cx = s / 2, cy = s * 0.86;
+  g.strokeStyle = g.fillStyle = "#000"; g.lineWidth = lw; g.lineCap = "round";
+  for (const r of [0.78, 0.53, 0.28]) { g.beginPath(); g.arc(cx, cy, r * s, -Math.PI * 0.75, -Math.PI * 0.25); g.stroke(); }
+  g.beginPath(); g.arc(cx, cy, Math.max(1, s * 0.09), 0, Math.PI * 2); g.fill();
+  if (!on) {
+    // Clear a gap either side of the slash so it reads against the arcs.
+    g.globalCompositeOperation = "destination-out"; g.lineWidth = lw * 2.6;
+    g.beginPath(); g.moveTo(s * 0.12, s * 0.1); g.lineTo(s * 0.88, s * 0.94); g.stroke();
+    g.globalCompositeOperation = "source-over"; g.lineWidth = lw;
+    g.beginPath(); g.moveTo(s * 0.12, s * 0.1); g.lineTo(s * 0.88, s * 0.94); g.stroke();
+  }
+  const d = g.getImageData(0, 0, s, s).data, bits = new Uint8Array(s * s);
+  for (let i = 0; i < s * s; i++) bits[i] = d[i * 4 + 3] >= 128 ? 1 : 0;
+  wifiCache.set(key, bits);
+  return bits;
+}
+function wifiSize(el) { return clamp(Math.round(Number(el.size) || 24), 8, 64); }
 function drawElement(buf, el, now) {
+  if (el.type === "wifi") {
+    const s = wifiSize(el), on = S.sample.wifi !== false, bits = wifiBits(s, on), pat = patternOf(on ? el.color : el.offColor);
+    for (let j = 0; j < s; j++) for (let i = 0; i < s; i++) if (bits[j * s + i]) fillRect(buf, el.x + i, el.y + j, 1, 1, pat);
+    return { x: el.x, y: el.y, w: s, h: s };
+  }
   if (el.type === "schedule") {
     const bh = boxHeight(el), pad = Number(el.boxPad || 0);
     if (el.box) fillRect(buf, el.x - pad, el.y - pad, el.width + 2 * pad, bh + 2 * pad, patternOf(el.boxColor));
@@ -1002,6 +1038,11 @@ function buildProps(container, el) {
   const f = h("div", { class: "fields" });
   if (el.id !== "overlay") f.append(field("Name", text(el, "name", "list")));
   f.append(field("x", num(el, "x", -80, W + 80, null, true)), field("y", num(el, "y", -80, H + 80, null, true)));
+  if (el.type === "wifi") {
+    f.append(field("Size (px)", num(el, "size", 8, 64)), fieldDiv("Ink when connected", inkPicker(el, "color"), true), fieldDiv("Ink when there's no WiFi", inkPicker(el, "offColor"), true),
+      h("p", { class: "note wide" }, "Shows whether the last connection worked (the device goes online after a redraw when weather or the schedule is due). Switch it in Weather → Preview values."));
+    container.append(f); return;
+  }
   if (el.type !== "schedule") f.append(alignField(el));
   f.append(...fontFields(el));
   f.append(fieldDiv(el.type === "schedule" ? "Entry text ink" : "Ink", inkPicker(el, "color"), true));
@@ -1233,6 +1274,8 @@ function bindStatic() {
   bind("#s-hum", () => S.sample.humidity, (v) => S.sample.humidity = v);
   bind("#s-city", () => S.sample.city, (v) => S.sample.city = v);
   bind("#s-volts", () => S.sample.volts, (v) => S.sample.volts = v);
+  bind("#s-wifi", () => S.sample.wifi !== false, (v) => S.sample.wifi = v, "change");
+  bind("#t-update", () => String(updateMinutes()), (v) => S.timing.updateMinutes = Number(v), "change");
   bind("#s-url", () => S.schedule.url, (v) => S.schedule.url = v.trim());
   bind("#s-refresh", () => S.schedule.refreshMinutes, (v) => S.schedule.refreshMinutes = clamp(Math.round(Number(v)) || 15, 1, 1440));
   bind("#s-preview", () => S.schedule.previewText, (v) => S.schedule.previewText = v);
@@ -1340,6 +1383,11 @@ function merge(base, data) {
     if (sc && sc.y === 172) sc.y = 196;
     out.v = 5;
   }
+  if (out.v < 6) {
+    // v6: WiFi status icon bottom row, between the email line and "Updated".
+    if (!out.elements.some((e) => e.type === "wifi")) out.elements.splice(Math.max(0, out.elements.findIndex((e) => e.type === "updated")), 0, { ...base.elements.find((e) => e.id === "wifi") });
+    out.v = 6;
+  }
   out.previewDay = "";
   return out;
 }
@@ -1398,11 +1446,12 @@ function cstr(s) {
   return out + '"';
 }
 function usedFonts() {
-  const list = S.elements.filter((e) => e.visible).map((e) => e.font);
+  const list = S.elements.filter((e) => e.visible && e.font).map((e) => e.font);
   if (activePhotos().length && S.gallery.overlay.visible) list.push(S.gallery.overlay.font);
+  if (!list.length) list.push(S.gallery.overlay.font); // layout.h always names one font
   const m = new Map(); for (const f of list) m.set(fontKey(f), f); return [...m.values()];
 }
-const ELTYPE = { clock: "EL_CLOCK", date: "EL_DATE", temp: "EL_TEMP", updated: "EL_UPDATED", text: "EL_TEXT", schedule: "EL_SCHEDULE", battery: "EL_BATTERY" };
+const ELTYPE = { clock: "EL_CLOCK", date: "EL_DATE", temp: "EL_TEMP", updated: "EL_UPDATED", text: "EL_TEXT", schedule: "EL_SCHEDULE", battery: "EL_BATTERY", wifi: "EL_WIFI" };
 const ALIGN = { left: "AL_LEFT", center: "AL_CENTER", right: "AL_RIGHT" };
 // Color numbers in layout.h: 0-6 are the solid inks (same numbers as INKPLATE_*), mixed
 // colors follow from 7. Each number picks an 8x8 pattern from PATTERNS.
@@ -1418,7 +1467,11 @@ function colorTable() {
     .map(([v, name]) => `    {${[...patternOf(v)].join(",")}}, // ${name}`).join("\n");
   return { c, patternsC };
 }
-function elementC(e, ink) {
+function elementC(e, ink, fallbackFont) {
+  if (e.type === "wifi")
+    // The icon uses: color = connected ink, highlightColor = no-WiFi ink, width = size (bits in WIFI_*_BITS).
+    return `    {EL_WIFI, ${e.x}, ${e.y}, AL_LEFT, &${fontIdent(fallbackFont)}, ${ink(e.color)}, "", "",\n` +
+      `     0, ${ink(e.offColor)}, 0, 0, 0, 0, ${wifiSize(e)}, false, 0, 0, 0, false}, // ${e.name.replace(/[^\x20-\x7e]/g, "?")}`;
   const sch = e.type === "schedule";
   const txt = e.type === "text" ? e.text : (e.format ?? "");
   return `    {${ELTYPE[e.type]}, ${e.x}, ${e.y}, ${ALIGN[e.align || "left"]}, &${fontIdent(e.font)}, ${ink(e.color)}, ${cstr(txt)}, ${cstr(e.pending ?? "")},\n` +
@@ -1434,7 +1487,18 @@ function layoutH() {
   const ov = S.gallery.overlay, ovVisible = !!(ov.visible && photos.length);
   const ovFont = ovVisible ? ov.font : (usedFonts()[0] || ov.font);
   const colors = colorTable(), ink = colors.c;
-  const elementsC = els.map((e) => elementC(e, ink)).join("\n");
+  const elementsC = els.map((e) => elementC(e, ink, ovFont)).join("\n");
+  const wifiEl = els.find((e) => e.type === "wifi"), ws = wifiEl ? wifiSize(wifiEl) : 0;
+  const bitsC = (on) => {
+    if (!ws) return "0";
+    const b = wifiBits(ws, on), rows = [];
+    for (let j = 0; j < ws; j++) {
+      const bytes = [];
+      for (let i = 0; i < ws; i += 8) { let v = 0; for (let k = 0; k < 8; k++) if (i + k < ws && b[j * ws + i + k]) v |= 0x80 >> k; bytes.push("0x" + v.toString(16).padStart(2, "0")); }
+      rows.push("    " + bytes.join(","));
+    }
+    return "\n" + rows.join(",\n") + "\n";
+  };
   const overlayC = elementC({ ...ov, font: ovFont, type: "clock", name: "Clock over photos" }, ink).replace(/,( \/\/.*)$/, ";$1");
   const bgC = ink(S.background.ink), fillC = ink(S.gallery.fill);
   return `// Layout made by Inkplate 6COLOR Designer, ${new Date().toLocaleString()}.
@@ -1446,6 +1510,8 @@ function layoutH() {
 #define WEATHER_UNITS ${cstr(S.weather.units)}
 static const uint16_t MAIN_MINUTES = ${S.timing.mainMinutes};
 static const uint16_t WEATHER_MINUTES = ${S.timing.weatherMinutes};
+// The screen (and clock) is redrawn every UPDATE_MINUTES, on the hour and every N minutes after.
+static const uint16_t UPDATE_MINUTES = ${updateMinutes()};
 static const uint8_t BG_INK = ${bgC};
 static const char *const BG_IMAGE = ${S.background.image ? '"/bg.bin"' : "nullptr"};
 static const uint8_t GALLERY_FILL = ${fillC};
@@ -1474,6 +1540,11 @@ static const Photo PHOTOS[] = {
 ${photos.map((p) => `    {${cstr(p.file)}, ${p.minutes}},`).join("\n") || "    {\"\", 0},"}
 };
 static const int PHOTO_COUNT = ${photos.length};
+
+// WiFi icon bitmaps (1 bit per pixel, rows of WIFI_ICON_SIZE bits, high bit first).
+static const int WIFI_ICON_SIZE = ${ws};
+static const uint8_t WIFI_ON_BITS[] = {${bitsC(true)}};
+static const uint8_t WIFI_OFF_BITS[] = {${bitsC(false)}};
 
 static const bool OVERLAY_VISIBLE = ${ovVisible ? "true" : "false"};
 static const Element OVERLAY =

@@ -34,7 +34,8 @@ enum ElementType
     EL_UPDATED,
     EL_TEXT,
     EL_SCHEDULE,
-    EL_BATTERY
+    EL_BATTERY,
+    EL_WIFI // icon: color = connected ink, highlightColor = no-WiFi ink, width = size
 };
 
 enum TextAlign

@@ -1,4 +1,4 @@
-// Layout made by Inkplate 6COLOR Designer, 10/20/2026, 7:00:24 AM.
+// Layout made by Inkplate 6COLOR Designer, 10/20/2026, 7:00:00 AM.
 // Export again from the designer to change it.
 #pragma once
 
@@ -7,6 +7,8 @@
 #define WEATHER_UNITS "imperial"
 static const uint16_t MAIN_MINUTES = 10;
 static const uint16_t WEATHER_MINUTES = 10;
+// The screen (and clock) is redrawn every UPDATE_MINUTES, on the hour and every N minutes after.
+static const uint16_t UPDATE_MINUTES = 5;
 static const uint8_t BG_INK = INKPLATE_WHITE;
 static const char *const BG_IMAGE = nullptr;
 static const uint8_t GALLERY_FILL = INKPLATE_WHITE;
@@ -36,14 +38,18 @@ static const Element ELEMENTS[] = {
      0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, false}, // Temperature
     {EL_TEMP, 576, 94, AL_RIGHT, &font_sans_24, INKPLATE_BLUE, "{desc}", "",
      0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, false}, // Conditions
-    {EL_SCHEDULE, 28, 172, AL_LEFT, &font_sans_26, INKPLATE_BLACK, "", "",
+    {EL_TEXT, 28, 158, AL_LEFT, &font_sans_22b, INKPLATE_BLUE, "My week", "",
+     0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, false}, // Schedule heading
+    {EL_SCHEDULE, 28, 196, AL_LEFT, &font_sans_26, INKPLATE_BLACK, "", "",
      INKPLATE_BLUE, INKPLATE_RED, 5, 35, 112, 240, 544, false, INKPLATE_YELLOW, 8, 165, true}, // Schedule
     {EL_TEXT, 24, 418, AL_LEFT, &font_sans_18, INKPLATE_BLUE, "email : mbreilly@hep.upenn.edu", "",
      0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, false}, // Email
+    {EL_WIFI, 404, 414, AL_LEFT, &font_sans_40b, INKPLATE_BLACK, "", "",
+     0, INKPLATE_RED, 0, 0, 0, 0, 24, false, 0, 0, 0, false}, // WiFi status
     {EL_UPDATED, 576, 418, AL_RIGHT, &font_sans_18, INKPLATE_BLACK, "Updated {time}", "Updating...",
      0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, false}, // Last updated
 };
-static const int ELEMENT_COUNT = 7;
+static const int ELEMENT_COUNT = 9;
 
 static const SchedEntry SCHEDULE[] = {
     {ENTRY_RANGE, 400, 820, 0x0f, "In DRL"},
@@ -58,6 +64,61 @@ static const Photo PHOTOS[] = {
     {"/gallery/photo02.bin", 2},
 };
 static const int PHOTO_COUNT = 2;
+
+// WiFi icon bitmaps (1 bit per pixel, rows of WIFI_ICON_SIZE bits, high bit first).
+static const int WIFI_ICON_SIZE = 24;
+static const uint8_t WIFI_ON_BITS[] = {
+    0x00,0x00,0x00,
+    0x03,0xff,0xc0,
+    0x1f,0xff,0xf8,
+    0x3f,0x81,0xfc,
+    0xfc,0x00,0x3f,
+    0xf0,0x00,0x0f,
+    0xc0,0x00,0x03,
+    0x81,0xff,0x81,
+    0x07,0xff,0xe0,
+    0x1f,0xc3,0xf8,
+    0x3e,0x00,0x7c,
+    0x38,0x00,0x1c,
+    0x30,0x00,0x0c,
+    0x00,0xff,0x00,
+    0x01,0xff,0x80,
+    0x03,0xe7,0xc0,
+    0x03,0x81,0xc0,
+    0x00,0x00,0x00,
+    0x00,0x00,0x00,
+    0x00,0x3c,0x00,
+    0x00,0x3c,0x00,
+    0x00,0x3c,0x00,
+    0x00,0x18,0x00,
+    0x00,0x00,0x00
+};
+static const uint8_t WIFI_OFF_BITS[] = {
+    0x00,0x00,0x00,
+    0x31,0xff,0xc0,
+    0x38,0xff,0xf8,
+    0x3c,0x01,0xfc,
+    0x1e,0x00,0x3f,
+    0x8e,0x00,0x0f,
+    0xc7,0x00,0x03,
+    0x83,0x8f,0x81,
+    0x01,0xc7,0xe0,
+    0x18,0xe3,0xf8,
+    0x3c,0xf0,0x7c,
+    0x38,0x78,0x1c,
+    0x30,0x3c,0x0c,
+    0x00,0x1e,0x00,
+    0x01,0x8f,0x00,
+    0x03,0xc7,0x00,
+    0x03,0x83,0x80,
+    0x00,0x01,0xc0,
+    0x00,0x00,0xe0,
+    0x00,0x3c,0x70,
+    0x00,0x3c,0x78,
+    0x00,0x3c,0x3c,
+    0x00,0x18,0x1c,
+    0x00,0x00,0x0c
+};
 
 static const bool OVERLAY_VISIBLE = true;
 static const Element OVERLAY =

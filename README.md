@@ -4,6 +4,8 @@ A browser-based layout designer and matching Arduino firmware for the Soldered I
 
 The schedule can be typed into the designer or read from a plain-text file at a web address (Schedule tab → Read it from a web address), the same as the PyPortal version. The Inkplate checks the file on the interval you set and keeps the last good copy in flash.
 
+The 6COLOR panel can only redraw the whole screen (a 12 to 15 second refresh with flashing), so the clock is redrawn every few minutes rather than every minute: Weather tab → Time format → Redraw the clock every (1 to 30 minutes, 5 by default). A WiFi status icon (bottom row by default) shows whether the board's last connection worked; it turns into a slashed icon in its own ink when it didn't.
+
 ## Folders
 
 - `designer/inkplate-designer.html`: the designer. Open it in a browser, no install or server needed.
