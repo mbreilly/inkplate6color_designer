@@ -645,16 +645,6 @@ size_t cleanScheduleText(const uint8_t *in, size_t n, char *out, size_t cap)
     return o;
 }
 
-// One line of a schedule file. "|" splits it into days, time and text; with two
-// parts the first goes under the days and times; with none it runs the full width.
-// "!" in front means the happening-now color, "#" in front leaves the line out.
-struct FileLine
-{
-    char days[48], when[48], what[128];
-    uint8_t cols; // 1, 2 or 3
-    bool hot;
-};
-
 void trimCopy(char *out, size_t n, const char *from, const char *to)
 {
     while (from < to && *from == ' ')
@@ -1322,6 +1312,17 @@ struct Photo
 {
     const char *file; // on the microSD card
     uint16_t minutes;
+};
+
+// One line of a schedule file read from SCHEDULE_URL. "|" splits it into days, time
+// and text; with two parts the first goes under the days and times; with none it runs
+// the full width. "!" in front means the happening-now color, "#" in front leaves the
+// line out. Declared here for the same reason as Lookup.
+struct FileLine
+{
+    char days[48], when[48], what[128];
+    uint8_t cols; // 1, 2 or 3
+    bool hot;
 };
 </script>
 <script>

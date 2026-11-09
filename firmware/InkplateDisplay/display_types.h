@@ -83,3 +83,14 @@ struct Photo
     const char *file; // on the microSD card
     uint16_t minutes;
 };
+
+// One line of a schedule file read from SCHEDULE_URL. "|" splits it into days, time
+// and text; with two parts the first goes under the days and times; with none it runs
+// the full width. "!" in front means the happening-now color, "#" in front leaves the
+// line out. Declared here for the same reason as Lookup.
+struct FileLine
+{
+    char days[48], when[48], what[128];
+    uint8_t cols; // 1, 2 or 3
+    bool hot;
+};
