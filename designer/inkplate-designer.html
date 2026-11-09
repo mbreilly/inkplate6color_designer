@@ -81,9 +81,10 @@ section.panel { display: grid; gap: 14px; }
 .field.wide { grid-column: 1 / -1; }
 .field > span { font-size: 12px; color: var(--muted); }
 .check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-input[type=text], input[type=number], input[type=password], input[type=time], select {
+input[type=text], input[type=number], input[type=password], input[type=time], input[type=url], select, textarea {
   width: 100%; min-width: 0; font: 14px var(--f-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
 input[type=number] { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+textarea { font: 13px/1.5 var(--f-mono); resize: vertical; }
 input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .btn { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 7px; padding: 7px 12px; font: 500 13px var(--f-body); cursor: pointer; }
 .btn:hover { border-color: var(--accent); }
@@ -191,10 +192,28 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
 
       <section class="panel" data-panel="schedule" hidden>
         <div class="card">
+          <h2>Where the schedule comes from</h2>
+          <div class="seg" role="group" aria-label="Where the schedule comes from">
+            <button type="button" id="src-manual" aria-pressed="true">Type it in here</button>
+            <button type="button" id="src-url" aria-pressed="false">Read it from a web address</button>
+          </div>
+          <div id="src-url-fields" hidden style="display:grid;gap:12px">
+            <p class="note">The Inkplate reads a plain-text file from this address and shows one line on the screen for each line of text. Change the file and the screen follows at the next check, with no new export.</p>
+            <div class="fields">
+              <label class="field wide"><span>Web address of the text file</span><input type="url" id="s-url" placeholder="https://raw.githubusercontent.com/you/repo/main/schedule.txt" spellcheck="false" autocomplete="off"></label>
+              <label class="field"><span>Check for changes every (minutes)</span><input type="number" id="s-refresh" min="1" max="1440"></label>
+            </div>
+            <p class="note">Split a line into the same columns as typed entries with <code>|</code> or a tab, e.g. <code>MTWT | 6:40am | In DRL until 1:40pm</code>. A line with two parts puts the first under the days and times; a line with no <code>|</code> runs across the whole width. Start a line with <code>!</code> to show it in the happening-now ink, or <code>#</code> to leave it out.</p>
+            <label class="field"><span>Preview text: what the address returns</span><textarea id="s-preview" rows="7" spellcheck="false"></textarea></label>
+            <div class="toolbar"><button type="button" class="btn small" id="s-fetch">Load the preview from the address</button><span class="status" id="s-fetch-status"></span></div>
+            <p class="note">Until its first read the Inkplate shows “Loading schedule...”. If a later read fails it keeps the last schedule it got, even through a power cut. It reads up to 4 KB. Checks happen after a screen refresh, so a change shows up at the following minute.</p>
+          </div>
+        </div>
+        <div class="card">
           <h2>Schedule inks</h2>
           <div id="sched-colors"></div>
         </div>
-        <div class="card">
+        <div class="card" id="sched-entries-card">
           <h2>Schedule entries <span class="toolbar"><button class="btn small" id="sched-sort">Sort by time</button><button class="btn small" id="sched-add">+ Entry</button></span></h2>
           <p class="note">Each entry is one line on the screen, in this order: its days, its time, then what it is, for example “MTWT 6:40am In DRL until 1:40pm” or “F All day Work from home”. Entries that span a window or last all day light up while they're happening. Use ↑ ↓ to set the order.</p>
           <label class="field" style="max-width:260px"><span>Preview the screen as if it's</span><select id="preview-day"></select></label>
@@ -328,6 +347,7 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
 #include "Inkplate.h"
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
+#include <Preferences.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 
@@ -358,6 +378,15 @@ RTC_DATA_ATTR uint32_t nextFetchUtc = 0;
 RTC_DATA_ATTR uint32_t lastWeatherUtc = 0; // 0 = never fetched
 RTC_DATA_ATTR Weather wx;
 RTC_DATA_ATTR uint32_t leadMs[2] = {15000, 17000}; // wake -> refresh done, for [main screen, photo]
+RTC_DATA_ATTR uint32_t nextScheduleUtc = 0;        // next read of SCHEDULE_URL
+RTC_DATA_ATTR bool scheduleError = false;          // the last read of SCHEDULE_URL failed
+
+// Schedule read from SCHEDULE_URL, already cleaned to printable ASCII (cleanScheduleText).
+// The last good copy is kept in flash (loadSchedule / fetchSchedule), so it survives
+// deep sleep and power cuts and a failed read keeps showing it.
+static const size_t SCHEDULE_MAX_BYTES = 4096;
+char scheduleText[SCHEDULE_MAX_BYTES + 1];
+bool haveSchedule = false;
 
 // ---------------------------------------------------------------- text
 
@@ -568,11 +597,188 @@ void shortTime(char *out, size_t n, int minute)
         snprintf(out, n, "%d:%02d%s", (hour % 12) ? hour % 12 : 12, m, hour < 12 ? "am" : "pm");
 }
 
+// Turns a schedule file (UTF-8) into what the fonts can draw, like cleanText() in the
+// designer: curly quotes, dashes, "..." and no-break spaces become plain characters, a
+// tab becomes "|", the degree sign becomes the fonts' code 127 and anything else
+// outside printable ASCII is dropped. Writes at most cap characters plus a 0 to out.
+// Returns the cleaned length.
+size_t cleanScheduleText(const uint8_t *in, size_t n, char *out, size_t cap)
+{
+    size_t o = 0;
+    auto put = [&](const char *t) {
+        for (; *t && o < cap; t++)
+            out[o++] = *t;
+    };
+    for (size_t i = 0; i < n; i++)
+    {
+        uint8_t c = in[i];
+        if (c == '\t')
+            put("|");
+        else if (c == '\n' || (c >= 32 && c < 127))
+        {
+            char t[2] = {(char)c, 0};
+            put(t);
+        }
+        else if (c == 0xC2 && i + 1 < n && (in[i + 1] == 0xA0 || in[i + 1] == 0xB0))
+            put(in[++i] == 0xA0 ? " " : "\177");
+        else if (c == 0xE2 && i + 2 < n && in[i + 1] == 0x80)
+        {
+            uint8_t d = in[i + 2];
+            i += 2;
+            if (d == 0x98 || d == 0x99)
+                put("'");
+            else if (d == 0x9C || d == 0x9D)
+                put("\"");
+            else if (d == 0x93 || d == 0x94)
+                put("-");
+            else if (d == 0xA6)
+                put("...");
+        }
+        else if (c >= 0xC0)
+        {
+            // skip the rest of any other multi-byte character
+            while (i + 1 < n && (in[i + 1] & 0xC0) == 0x80)
+                i++;
+        }
+    }
+    out[o] = 0;
+    return o;
+}
+
+// One line of a schedule file. "|" splits it into days, time and text; with two
+// parts the first goes under the days and times; with none it runs the full width.
+// "!" in front means the happening-now color, "#" in front leaves the line out.
+struct FileLine
+{
+    char days[48], when[48], what[128];
+    uint8_t cols; // 1, 2 or 3
+    bool hot;
+};
+
+void trimCopy(char *out, size_t n, const char *from, const char *to)
+{
+    while (from < to && *from == ' ')
+        from++;
+    while (to > from && to[-1] == ' ')
+        to--;
+    snprintf(out, n, "%.*s", (int)(to - from), from);
+}
+
+// Reads the line starting at *p into line and moves *p past it. Returns false when the
+// line is blank or a comment (the caller skips it).
+bool nextFileLine(const char **p, FileLine &line)
+{
+    const char *start = *p, *end = strchr(start, '\n');
+    if (!end)
+        end = start + strlen(start);
+    *p = *end ? end + 1 : end;
+    while (start < end && *start == ' ')
+        start++;
+    while (end > start && end[-1] == ' ')
+        end--;
+    if (start == end || *start == '#')
+        return false;
+    line.hot = *start == '!';
+    if (line.hot)
+        start++;
+    const char *bar1 = (const char *)memchr(start, '|', end - start);
+    const char *bar2 = bar1 ? (const char *)memchr(bar1 + 1, '|', end - bar1 - 1) : nullptr;
+    line.days[0] = line.when[0] = line.what[0] = 0;
+    if (!bar1)
+    {
+        line.cols = 1;
+        trimCopy(line.what, sizeof(line.what), start, end);
+    }
+    else if (!bar2)
+    {
+        line.cols = 2;
+        trimCopy(line.days, sizeof(line.days), start, bar1);
+        trimCopy(line.what, sizeof(line.what), bar1 + 1, end);
+    }
+    else
+    {
+        line.cols = 3;
+        trimCopy(line.days, sizeof(line.days), start, bar1);
+        trimCopy(line.when, sizeof(line.when), bar1 + 1, bar2);
+        // Any further parts join the text, separated by single spaces; empty ones drop out.
+        size_t o = 0;
+        for (const char *seg = bar2 + 1; seg <= end;)
+        {
+            const char *stop = (const char *)memchr(seg, '|', end - seg);
+            if (!stop)
+                stop = end;
+            char part[128];
+            trimCopy(part, sizeof(part), seg, stop);
+            if (*part)
+                o += snprintf(line.what + o, o < sizeof(line.what) ? sizeof(line.what) - o : 0, "%s%s", o ? " " : "", part);
+            if (o >= sizeof(line.what))
+                break;
+            seg = stop + 1;
+        }
+    }
+    return true;
+}
+
+// Schedule from SCHEDULE_URL, one screen line per file line (mirrors the designer).
+void drawScheduleFile(const Element &el)
+{
+    const char *msg = nullptr;
+    if (!strlen(SCHEDULE_URL))
+        msg = "No schedule web address set";
+    else if (!haveSchedule)
+        msg = scheduleError ? "Couldn't load the schedule" : "Loading schedule...";
+    if (msg)
+    {
+        char t[64];
+        snprintf(t, sizeof(t), "%s", msg);
+        fitText(el.font, t, sizeof(t), el.width);
+        drawText(el.font, t, el.x, el.y, AL_LEFT, el.color);
+        return;
+    }
+    const char *p = scheduleText;
+    FileLine line;
+    for (int r = 0; r < el.rows && *p;)
+    {
+        if (!nextFileLine(&p, line))
+            continue;
+        int y = el.y + r * el.rowHeight;
+        uint8_t tc = line.hot ? el.highlightColor : el.timeColor, xc = line.hot ? el.highlightColor : el.color;
+        if (line.cols == 1)
+        {
+            fitText(el.font, line.what, sizeof(line.what), el.width);
+            drawText(el.font, line.what, el.x, y, AL_LEFT, xc);
+        }
+        else
+        {
+            if (line.cols == 2)
+            {
+                fitText(el.font, line.days, sizeof(line.days), el.timeWidth - 4);
+                drawText(el.font, line.days, el.x, y, AL_LEFT, tc);
+            }
+            else
+            {
+                fitText(el.font, line.days, sizeof(line.days), el.daysWidth - 4);
+                drawText(el.font, line.days, el.x, y, AL_LEFT, tc);
+                fitText(el.font, line.when, sizeof(line.when), el.timeWidth - el.daysWidth - 4);
+                drawText(el.font, line.when, el.x + el.daysWidth, y, AL_LEFT, tc);
+            }
+            fitText(el.font, line.what, sizeof(line.what), el.width - el.timeWidth);
+            drawText(el.font, line.what, el.x + el.timeWidth, y, AL_LEFT, xc);
+        }
+        r++;
+    }
+}
+
 void drawSchedule(const Element &el, const struct tm &now)
 {
     if (el.box)
         fillColor(el.x - el.boxPad, el.y - el.boxPad, el.width + 2 * el.boxPad, el.boxHeight + 2 * el.boxPad,
                   el.boxColor);
+    if (SCHEDULE_FROM_URL)
+    {
+        drawScheduleFile(el);
+        return;
+    }
     static const char DAY_LETTERS[] = "MTWTFSS";
     int wday = (now.tm_wday + 6) % 7; // 0 = Monday
     int nowMin = now.tm_hour * 60 + now.tm_min;
@@ -796,9 +1002,92 @@ bool fetchWeather()
     return true;
 }
 
-// Connects to WiFi, sets the RTC from NTP and fetches weather.
+// Collects a download, keeping the first SCHEDULE_MAX_BYTES (HTTPClient handles chunked replies).
+struct CappedBuffer : Stream
+{
+    uint8_t *buf;
+    size_t n = 0, cap;
+    CappedBuffer(uint8_t *b, size_t c) : buf(b), cap(c) {}
+    size_t write(uint8_t c) override
+    {
+        if (n < cap)
+            buf[n++] = c;
+        return 1;
+    }
+    size_t write(const uint8_t *b, size_t len) override
+    {
+        size_t k = len < cap - n ? len : cap - n;
+        memcpy(buf + n, b, k);
+        n += k;
+        return len;
+    }
+    int available() override { return 0; }
+    int read() override { return -1; }
+    int peek() override { return -1; }
+    void flush() override {}
+};
+
+void loadSchedule()
+{
+    Preferences prefs;
+    prefs.begin("inkplate", true);
+    haveSchedule = prefs.getBool("schedOk", false);
+    size_t n = haveSchedule ? prefs.getBytes("sched", scheduleText, SCHEDULE_MAX_BYTES) : 0;
+    scheduleText[n] = 0;
+    prefs.end();
+}
+
+// Reads SCHEDULE_URL and keeps it (in RAM and flash) if the read worked.
+bool fetchSchedule()
+{
+    WiFiClientSecure secure;
+    secure.setInsecure();
+    WiFiClient plain;
+    bool https = strncmp(SCHEDULE_URL, "https:", 6) == 0;
+    HTTPClient http;
+    http.setTimeout(20000);
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    if (!(https ? http.begin(secure, SCHEDULE_URL) : http.begin(plain, SCHEDULE_URL)))
+        return false;
+    int code = http.GET();
+    if (code != HTTP_CODE_OK)
+    {
+        Serial.printf("Schedule update failed: HTTP %d\n", code);
+        http.end();
+        return false;
+    }
+    static uint8_t raw[SCHEDULE_MAX_BYTES];
+    CappedBuffer body(raw, sizeof(raw));
+    int got = http.writeToStream(&body);
+    http.end();
+    if (got < 0 && body.n == 0)
+    {
+        Serial.printf("Schedule update failed: %s\n", HTTPClient::errorToString(got).c_str());
+        return false;
+    }
+    const uint8_t *start = raw;
+    size_t len = body.n;
+    if (len >= 3 && raw[0] == 0xEF && raw[1] == 0xBB && raw[2] == 0xBF) // byte order mark
+        start += 3, len -= 3;
+    size_t n = cleanScheduleText(start, len, scheduleText, SCHEDULE_MAX_BYTES);
+    haveSchedule = true;
+    Preferences prefs;
+    prefs.begin("inkplate", false);
+    prefs.putBytes("sched", scheduleText, n);
+    prefs.putBool("schedOk", true);
+    prefs.end();
+    return true;
+}
+
+bool scheduleDue()
+{
+    return SCHEDULE_FROM_URL && strlen(SCHEDULE_URL) && display.rtc.getEpoch() >= nextScheduleUtc;
+}
+
+// Connects to WiFi; sets the RTC from NTP and fetches weather when that's due (or
+// first is set), and reads the schedule file when that's due.
 // Returns true if the RTC now holds a good time.
-bool goOnline()
+bool goOnline(bool first)
 {
     if (!strlen(WIFI_SSID))
         return display.rtc.isSet();
@@ -812,26 +1101,41 @@ bool goOnline()
     {
         Serial.println("WiFi failed");
         WiFi.mode(WIFI_OFF);
-        nextFetchUtc = display.rtc.getEpoch() + 5 * 60; // try again in 5 minutes
+        uint32_t now = display.rtc.getEpoch();
+        if (first || now >= nextFetchUtc)
+            nextFetchUtc = now + 5 * 60; // try again in 5 minutes
+        if (scheduleDue())
+            nextScheduleUtc = now + 5 * 60;
         return display.rtc.isSet();
     }
 
-    // NTP gives UTC; the RTC keeps UTC and the zone offset is applied when drawing.
-    configTime(0, 0, "pool.ntp.org");
-    t0 = millis();
-    while (time(nullptr) < 1700000000 && millis() - t0 < 10000)
-        delay(100);
-    if (time(nullptr) >= 1700000000)
-        display.rtc.setEpoch(time(nullptr));
-
-    uint32_t now = display.rtc.getEpoch();
-    nextFetchUtc = now + WEATHER_MINUTES * 60;
-    if (strlen(OPENWEATHER_KEY))
+    if (first || display.rtc.getEpoch() >= nextFetchUtc)
     {
-        if (fetchWeather())
-            lastWeatherUtc = now;
-        else
-            nextFetchUtc = now + 5 * 60;
+        // NTP gives UTC; the RTC keeps UTC and the zone offset is applied when drawing.
+        configTime(0, 0, "pool.ntp.org");
+        t0 = millis();
+        while (time(nullptr) < 1700000000 && millis() - t0 < 10000)
+            delay(100);
+        if (time(nullptr) >= 1700000000)
+            display.rtc.setEpoch(time(nullptr));
+
+        uint32_t now = display.rtc.getEpoch();
+        nextFetchUtc = now + WEATHER_MINUTES * 60;
+        if (strlen(OPENWEATHER_KEY))
+        {
+            if (fetchWeather())
+                lastWeatherUtc = now;
+            else
+                nextFetchUtc = now + 5 * 60;
+        }
+    }
+
+    if (scheduleDue())
+    {
+        // A failed read keeps the last schedule on screen and tries again in 5 minutes.
+        bool ok = fetchSchedule();
+        scheduleError = !ok;
+        nextScheduleUtc = display.rtc.getEpoch() + (ok ? SCHEDULE_REFRESH_MINUTES * 60 : 5 * 60);
     }
 
     WiFi.disconnect(true);
@@ -861,6 +1165,8 @@ void setup()
     Serial.begin(115200);
     display.begin();
     display.rtc.clearAlarmFlag();
+    if (SCHEDULE_FROM_URL)
+        loadSchedule();
 
     bool woke = esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0;
     bool onlineFirst = !woke || !display.rtc.isSet();
@@ -872,7 +1178,7 @@ void setup()
     }
 
     // Power-up: get the time (and weather) before the first draw.
-    if (onlineFirst && !goOnline())
+    if (onlineFirst && !goOnline(true))
     {
         drawMessage("No clock time yet", "Check WiFi settings in secrets.h");
         esp_sleep_enable_timer_wakeup(5ULL * 60 * 1000000); // retry in 5 minutes
@@ -909,9 +1215,9 @@ void setup()
         Serial.printf("Refresh took %lu ms, lead now %lu ms\n", millis(), l);
     }
 
-    // Weather and NTP happen after the refresh so they don't delay the clock.
-    if (!onlineFirst && display.rtc.getEpoch() >= nextFetchUtc)
-        goOnline();
+    // Weather, NTP and the schedule file happen after the refresh so they don't delay the clock.
+    if (!onlineFirst && (display.rtc.getEpoch() >= nextFetchUtc || scheduleDue()))
+        goOnline(false);
 
     // Next change: every minute on the main screen or a photo with the clock
     // over it; otherwise when this photo's time is up.
@@ -1114,9 +1420,16 @@ const CODES = []; for (let c = 32; c < 127; c++) CODES.push(c); CODES.push(176);
 const TYPE_LABEL = { clock: "clock", date: "date", temp: "weather", updated: "updated", schedule: "schedule", text: "text", battery: "battery" };
 
 /* ------------------------------------------------------------ state */
+const SAMPLE_SCHEDULE_TEXT = `# Lines starting with # are left out
+MTWT | 6:40am | In DRL until 1:40pm
+F | All day | Work from home
+Sa | 10:00am | Farmers market
+Next week | Conference in Chicago
+!Office closed Nov 26 and 27
+`;
 function exampleState() {
   return {
-    v: 4,
+    v: 5,
     previewDay: "",
     background: { ink: "white", image: null, imageName: "" },
     time: { hour24: false, ampm: true },
@@ -1125,13 +1438,14 @@ function exampleState() {
       { id: "date", type: "date", name: "Date", x: 28, y: 110, align: "left", font: { family: "sans", size: 28, weight: 400 }, color: "blue", visible: true, format: "{weekday}, {month} {day}" },
       { id: "temp", type: "temp", name: "Temperature", x: 576, y: 20, align: "right", font: { family: "Oswald", size: 56, weight: 700 }, color: "orange", visible: true, format: "{temp}{unit}" },
       { id: "cond", type: "temp", name: "Conditions", x: 576, y: 94, align: "right", font: { family: "sans", size: 24, weight: 400 }, color: "blue", visible: true, format: "{desc}" },
-      { id: "sched", type: "schedule", name: "Schedule", x: 28, y: 172, align: "left", font: { family: "sans", size: 26, weight: 400 }, color: "black", visible: true,
+      { id: "heading", type: "text", name: "Schedule heading", x: 28, y: 158, align: "left", font: { family: "sans", size: 22, weight: 700 }, color: "blue", visible: true, text: "My week" },
+      { id: "sched", type: "schedule", name: "Schedule", x: 28, y: 196, align: "left", font: { family: "sans", size: 26, weight: 400 }, color: "black", visible: true,
         timeColor: "blue", highlightColor: "red", rows: 5, rowGap: 10, daysWidth: 112, timeWidth: 240, width: 544, box: false, boxColor: "yellow", boxPad: 8, highlight: true },
       { id: "email", type: "text", name: "Email", x: 24, y: 418, align: "left", font: { family: "sans", size: 18, weight: 400 }, color: "blue", visible: true, text: "email : mbreilly@hep.upenn.edu" },
       { id: "batt", type: "battery", name: "Battery", x: 300, y: 418, align: "center", font: { family: "sans", size: 18, weight: 400 }, color: "black", visible: false, format: "{volts} V" },
       { id: "updated", type: "updated", name: "Last updated", x: 576, y: 418, align: "right", font: { family: "sans", size: 18, weight: 400 }, color: "black", visible: true, format: "Updated {time}", pending: "Updating..." },
     ],
-    schedule: { entries: [
+    schedule: { source: "manual", url: "", refreshMinutes: 15, previewText: SAMPLE_SCHEDULE_TEXT, entries: [
       { kind: "range", time: "06:40", end: "13:40", text: "In DRL", days: [0, 1, 2, 3] },
       { kind: "allday", time: "00:00", text: "Work from home", days: [4] },
       { kind: "range", time: "16:00", end: "17:30", text: "Soccer practice", days: [1, 3] },
@@ -1435,8 +1749,35 @@ function shortTime(min, h24) {
   const h = Math.floor(min / 60) % 24, m = min % 60;
   return h24 ? `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}` : `${(h % 12) || 12}:${String(m).padStart(2, "0")}${h < 12 ? "am" : "pm"}`;
 }
+// A schedule file as the device reads it (mirrors cleanScheduleText() and nextFileLine() in the firmware).
+const SWAPS = [["\u2018", "'"], ["\u2019", "'"], ["\u201c", '"'], ["\u201d", '"'], ["\u2013", "-"], ["\u2014", "-"], ["\u2026", "..."], ["\u00a0", " "], ["\t", "|"]];
+function cleanText(text) {
+  for (const [a, b] of SWAPS) text = text.split(a).join(b);
+  let out = ""; for (const ch of text) { const c = ch.codePointAt(0); if ((c >= 32 && c < 127) || c === 176) out += ch; }
+  return out;
+}
+function parseScheduleText(text) {
+  const rows = [];
+  for (const raw of text.split("\ufeff").join("").split("\n")) {
+    let line = cleanText(raw).trim();
+    if (!line || line[0] === "#") continue;
+    const hot = line[0] === "!";
+    if (hot) line = line.slice(1).trim();
+    const parts = line.split("|").map((p) => p.trim());
+    if (parts.length >= 3) rows.push({ days: parts[0], when: parts[1], what: parts.slice(2).filter(Boolean).join(" "), hot, layout: "cols3" });
+    else if (parts.length === 2) rows.push({ days: parts[0], when: "", what: parts[1], hot, layout: "cols2" });
+    else rows.push({ days: "", when: "", what: parts[0], hot, layout: "cols1" });
+  }
+  return rows;
+}
 // One line per entry: days, time, text. Spans and all-day entries light up while they're happening.
 function scheduleLines(el, now) {
+  if (S.schedule.source === "url") {
+    const msg = (what) => [{ days: "", when: "", what, hot: false, layout: "cols1" }];
+    if (!S.schedule.url.trim()) return msg("No schedule web address set");
+    if (!S.schedule.previewText.trim()) return msg("Loading schedule...");
+    return parseScheduleText(S.schedule.previewText).slice(0, el.rows);
+  }
   const wday = (now.getDay() + 6) % 7, nm = now.getHours() * 60 + now.getMinutes(), h24 = S.time.hour24;
   return S.schedule.entries.filter((e) => e.days && e.days.length).slice(0, el.rows).map((e) => {
     const kind = e.kind || "time", start = toMin(e.time), end = toMin(e.end);
@@ -1445,7 +1786,7 @@ function scheduleLines(el, now) {
     const what = kind === "range" ? `${e.text} until ${shortTime(end, h24)}` : e.text;
     const today = e.days.includes(wday);
     const hot = today && (kind === "allday" || (kind === "range" && (end > start ? start <= nm && nm < end : nm >= start || nm < end)));
-    return { days, when, what, hot };
+    return { days, when, what, hot, layout: "manual" };
   });
 }
 function drawElement(buf, el, now) {
@@ -1453,11 +1794,21 @@ function drawElement(buf, el, now) {
     const bh = boxHeight(el), pad = Number(el.boxPad || 0);
     if (el.box) fillRect(buf, el.x - pad, el.y - pad, el.width + 2 * pad, bh + 2 * pad, patternOf(el.boxColor));
     const r = raster(el.font), rh = rowHeight(el);
+    const dw = Number(el.daysWidth), tw = Number(el.timeWidth);
     scheduleLines(el, now).forEach((e, i) => {
-      const hot = el.highlight && e.hot, y = el.y + i * rh;
-      drawText(buf, el.font, e.days, el.x, y, "left", patternOf(hot ? el.highlightColor : el.timeColor));
-      drawText(buf, el.font, e.when, el.x + Number(el.daysWidth), y, "left", patternOf(hot ? el.highlightColor : el.timeColor));
-      drawText(buf, el.font, fitText(r, e.what, el.width - el.timeWidth), el.x + Number(el.timeWidth), y, "left", patternOf(hot ? el.highlightColor : el.color));
+      // Lines marked "!" in a schedule file always use the happening-now ink.
+      const hot = e.hot && (e.layout !== "manual" || el.highlight), y = el.y + i * rh;
+      const tc = patternOf(hot ? el.highlightColor : el.timeColor), xc = patternOf(hot ? el.highlightColor : el.color);
+      if (e.layout === "cols1") { drawText(buf, el.font, fitText(r, e.what, el.width), el.x, y, "left", xc); return; }
+      if (e.layout === "cols2") drawText(buf, el.font, fitText(r, e.days, tw - 4), el.x, y, "left", tc);
+      else if (e.layout === "cols3") {
+        drawText(buf, el.font, fitText(r, e.days, dw - 4), el.x, y, "left", tc);
+        drawText(buf, el.font, fitText(r, e.when, tw - dw - 4), el.x + dw, y, "left", tc);
+      } else {
+        drawText(buf, el.font, e.days, el.x, y, "left", tc);
+        drawText(buf, el.font, e.when, el.x + dw, y, "left", tc);
+      }
+      drawText(buf, el.font, fitText(r, e.what, el.width - tw), el.x + tw, y, "left", xc);
     });
     return { x: el.x, y: el.y, w: el.width, h: Math.max(bh, 6) };
   }
@@ -1746,6 +2097,7 @@ function renderLists() {
         onclick: () => { const a = S.schedule.entries; [a[i + 1], a[i]] = [a[i], a[i + 1]]; changed("list"); } }, "↓"),
         h("button", { class: "btn small danger", "aria-label": "Remove entry", onclick: () => { S.schedule.entries.splice(i, 1); changed("list"); } }, "Remove")), warn));
   });
+  syncSource();
   if (!S.schedule.entries.length) sl.append(h("p", { class: "note" }, "No entries yet. Add one with + Entry."));
   const sch = S.elements.find((e) => e.type === "schedule"), shown = S.schedule.entries.filter((e) => e.days.length).length;
   if (sch && shown > sch.rows) sl.append(h("p", { class: "note" }, `The screen shows ${sch.rows} lines, so the last ${shown - sch.rows} entr${shown - sch.rows === 1 ? "y is" : "ies are"} hidden. Raise “Rows shown” under Layout → Schedule or use a smaller font.`));
@@ -1873,6 +2225,11 @@ function bindStatic() {
   bind("#s-hum", () => S.sample.humidity, (v) => S.sample.humidity = v);
   bind("#s-city", () => S.sample.city, (v) => S.sample.city = v);
   bind("#s-volts", () => S.sample.volts, (v) => S.sample.volts = v);
+  bind("#s-url", () => S.schedule.url, (v) => S.schedule.url = v.trim());
+  bind("#s-refresh", () => S.schedule.refreshMinutes, (v) => S.schedule.refreshMinutes = clamp(Math.round(Number(v)) || 15, 1, 1440));
+  bind("#s-preview", () => S.schedule.previewText, (v) => S.schedule.previewText = v);
+  $("#src-manual").onclick = () => { S.schedule.source = "manual"; setView("main"); changed("list"); };
+  $("#src-url").onclick = () => { S.schedule.source = "url"; setView("main"); changed("list"); };
   $("#bg-ink").replaceChildren(inkPicker(S.background, "ink", "list", "bg"));
   $("#g-fill").replaceChildren(inkPicker(S.gallery, "fill", "list", "gfill"));
   $("#bg-name").textContent = S.background.image ? S.background.imageName : "No image";
@@ -1891,6 +2248,36 @@ $("#add-text").onclick = () => {
   const id = "t" + Date.now().toString(36);
   S.elements.push({ id, type: "text", name: "Text label", x: 300, y: 200, align: "center", font: { family: "sans", size: 32, weight: 400 }, color: "black", visible: true, text: "Hello" });
   select(id); changed("all");
+};
+let fetchNote = "";
+function syncSource() {
+  const url = S.schedule.source === "url";
+  $("#src-manual").setAttribute("aria-pressed", String(!url));
+  $("#src-url").setAttribute("aria-pressed", String(url));
+  $("#src-url-fields").hidden = !url;
+  $("#sched-entries-card").hidden = url;
+  if (!url) return;
+  const sch = S.elements.find((e) => e.type === "schedule"), n = parseScheduleText(S.schedule.previewText).length;
+  let note = fetchNote;
+  if (!note && !S.schedule.url) note = "Add the web address the Inkplate should read.";
+  else if (!note && sch && n > sch.rows) note = `The preview has ${n} lines and the screen shows ${sch.rows}, so the last ${n - sch.rows} won't show. Raise “Rows shown” under Layout → Schedule or use a smaller font.`;
+  $("#s-fetch-status").textContent = note;
+}
+$("#s-fetch").onclick = async () => {
+  const url = S.schedule.url, say = (t) => { fetchNote = t; syncSource(); };
+  if (!/^https?:\/\//i.test(url)) { say("Enter an address that starts with https:// or http://."); return; }
+  say("Loading...");
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = (await res.text()).slice(0, 4096);
+    S.schedule.previewText = text; $("#s-preview").value = text;
+    fetchNote = "Loaded. The preview now shows what the Inkplate will show.";
+    changed("list");
+  } catch (e) {
+    say("The designer can't read that address from here, since the browser blocks it. Paste the file's text into the preview box instead. The Inkplate reads the address itself.");
+  }
+  setTimeout(() => { fetchNote = ""; syncSource(); }, 10000);
 };
 $("#sched-add").onclick = () => { S.schedule.entries.push({ kind: "time", time: "12:00", text: "New entry", days: [(new Date().getDay() + 6) % 7] }); changed("list"); const last = document.querySelector(`#se-x-${S.schedule.entries.length - 1}`); last?.focus(); last?.select(); };
 $("#sched-sort").onclick = () => { const key = (e) => (e.kind === "allday" ? -1 : toMin(e.time)); S.schedule.entries.sort((a, b) => key(a) - key(b)); changed("list"); };
@@ -1937,6 +2324,13 @@ function merge(base, data) {
     out.elements = out.elements.filter((e) => !(e.id === "head" || (e.type === "text" && /^(today|this week)$/i.test((e.text || "").trim()))));
     if (!out.elements.some((e) => e.id === "email")) out.elements.splice(Math.max(0, out.elements.findIndex((e) => e.type === "updated")), 0, base.elements.find((e) => e.id === "email"));
     out.v = 4;
+  }
+  if (out.v < 5) {
+    // v5: editable heading above the schedule; nudge an unmoved schedule down to make room.
+    const sc = out.elements.find((e) => e.type === "schedule");
+    if (!out.elements.some((e) => e.id === "heading")) out.elements.splice(Math.max(0, out.elements.indexOf(sc)), 0, base.elements.find((e) => e.id === "heading"));
+    if (sc && sc.y === 172) sc.y = 196;
+    out.v = 5;
   }
   out.previewDay = "";
   return out;
@@ -2048,6 +2442,11 @@ static const uint8_t BG_INK = ${bgC};
 static const char *const BG_IMAGE = ${S.background.image ? '"/bg.bin"' : "nullptr"};
 static const uint8_t GALLERY_FILL = ${fillC};
 
+// Schedule source: false = the SCHEDULE entries below, true = a text file read from SCHEDULE_URL.
+#define SCHEDULE_FROM_URL ${S.schedule.source === "url" ? "true" : "false"}
+#define SCHEDULE_URL ${cstr(S.schedule.source === "url" ? S.schedule.url : "")}
+static const uint16_t SCHEDULE_REFRESH_MINUTES = ${S.schedule.refreshMinutes || 15};
+
 // Every color is an 8x8 tile of ink numbers, repeated across the screen.
 static const uint8_t PATTERNS[][64] = {
 ${colors.patternsC()}
@@ -2130,7 +2529,13 @@ each photo for its minutes, starting over at midnight.
 
 Changing the design later: edit it in the designer and export again. Copy the
 new layout.h and fonts.h (and sdcard/ if photos changed), then upload.
-
+${S.schedule.source === "url" ? `
+Schedule from a web address: the Inkplate reads
+  ${S.schedule.url}
+every ${S.schedule.refreshMinutes} minute${S.schedule.refreshMinutes === 1 ? "" : "s"}, after a screen refresh. Edit that file to change the
+schedule; no new export is needed. The last good copy is kept in flash, so a
+failed read (Serial Monitor shows "Schedule update failed") keeps it on screen.
+` : ""}
 Troubleshooting: open Serial Monitor at 115200 baud to see "WiFi failed",
 weather errors, and how long each refresh took. Press the reset button to
 start fresh.

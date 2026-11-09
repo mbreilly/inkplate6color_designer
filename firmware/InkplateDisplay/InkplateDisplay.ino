@@ -18,6 +18,7 @@
 #include "Inkplate.h"
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
+#include <Preferences.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 
@@ -48,6 +49,15 @@ RTC_DATA_ATTR uint32_t nextFetchUtc = 0;
 RTC_DATA_ATTR uint32_t lastWeatherUtc = 0; // 0 = never fetched
 RTC_DATA_ATTR Weather wx;
 RTC_DATA_ATTR uint32_t leadMs[2] = {15000, 17000}; // wake -> refresh done, for [main screen, photo]
+RTC_DATA_ATTR uint32_t nextScheduleUtc = 0;        // next read of SCHEDULE_URL
+RTC_DATA_ATTR bool scheduleError = false;          // the last read of SCHEDULE_URL failed
+
+// Schedule read from SCHEDULE_URL, already cleaned to printable ASCII (cleanScheduleText).
+// The last good copy is kept in flash (loadSchedule / fetchSchedule), so it survives
+// deep sleep and power cuts and a failed read keeps showing it.
+static const size_t SCHEDULE_MAX_BYTES = 4096;
+char scheduleText[SCHEDULE_MAX_BYTES + 1];
+bool haveSchedule = false;
 
 // ---------------------------------------------------------------- text
 
@@ -258,11 +268,188 @@ void shortTime(char *out, size_t n, int minute)
         snprintf(out, n, "%d:%02d%s", (hour % 12) ? hour % 12 : 12, m, hour < 12 ? "am" : "pm");
 }
 
+// Turns a schedule file (UTF-8) into what the fonts can draw, like cleanText() in the
+// designer: curly quotes, dashes, "..." and no-break spaces become plain characters, a
+// tab becomes "|", the degree sign becomes the fonts' code 127 and anything else
+// outside printable ASCII is dropped. Writes at most cap characters plus a 0 to out.
+// Returns the cleaned length.
+size_t cleanScheduleText(const uint8_t *in, size_t n, char *out, size_t cap)
+{
+    size_t o = 0;
+    auto put = [&](const char *t) {
+        for (; *t && o < cap; t++)
+            out[o++] = *t;
+    };
+    for (size_t i = 0; i < n; i++)
+    {
+        uint8_t c = in[i];
+        if (c == '\t')
+            put("|");
+        else if (c == '\n' || (c >= 32 && c < 127))
+        {
+            char t[2] = {(char)c, 0};
+            put(t);
+        }
+        else if (c == 0xC2 && i + 1 < n && (in[i + 1] == 0xA0 || in[i + 1] == 0xB0))
+            put(in[++i] == 0xA0 ? " " : "\177");
+        else if (c == 0xE2 && i + 2 < n && in[i + 1] == 0x80)
+        {
+            uint8_t d = in[i + 2];
+            i += 2;
+            if (d == 0x98 || d == 0x99)
+                put("'");
+            else if (d == 0x9C || d == 0x9D)
+                put("\"");
+            else if (d == 0x93 || d == 0x94)
+                put("-");
+            else if (d == 0xA6)
+                put("...");
+        }
+        else if (c >= 0xC0)
+        {
+            // skip the rest of any other multi-byte character
+            while (i + 1 < n && (in[i + 1] & 0xC0) == 0x80)
+                i++;
+        }
+    }
+    out[o] = 0;
+    return o;
+}
+
+// One line of a schedule file. "|" splits it into days, time and text; with two
+// parts the first goes under the days and times; with none it runs the full width.
+// "!" in front means the happening-now color, "#" in front leaves the line out.
+struct FileLine
+{
+    char days[48], when[48], what[128];
+    uint8_t cols; // 1, 2 or 3
+    bool hot;
+};
+
+void trimCopy(char *out, size_t n, const char *from, const char *to)
+{
+    while (from < to && *from == ' ')
+        from++;
+    while (to > from && to[-1] == ' ')
+        to--;
+    snprintf(out, n, "%.*s", (int)(to - from), from);
+}
+
+// Reads the line starting at *p into line and moves *p past it. Returns false when the
+// line is blank or a comment (the caller skips it).
+bool nextFileLine(const char **p, FileLine &line)
+{
+    const char *start = *p, *end = strchr(start, '\n');
+    if (!end)
+        end = start + strlen(start);
+    *p = *end ? end + 1 : end;
+    while (start < end && *start == ' ')
+        start++;
+    while (end > start && end[-1] == ' ')
+        end--;
+    if (start == end || *start == '#')
+        return false;
+    line.hot = *start == '!';
+    if (line.hot)
+        start++;
+    const char *bar1 = (const char *)memchr(start, '|', end - start);
+    const char *bar2 = bar1 ? (const char *)memchr(bar1 + 1, '|', end - bar1 - 1) : nullptr;
+    line.days[0] = line.when[0] = line.what[0] = 0;
+    if (!bar1)
+    {
+        line.cols = 1;
+        trimCopy(line.what, sizeof(line.what), start, end);
+    }
+    else if (!bar2)
+    {
+        line.cols = 2;
+        trimCopy(line.days, sizeof(line.days), start, bar1);
+        trimCopy(line.what, sizeof(line.what), bar1 + 1, end);
+    }
+    else
+    {
+        line.cols = 3;
+        trimCopy(line.days, sizeof(line.days), start, bar1);
+        trimCopy(line.when, sizeof(line.when), bar1 + 1, bar2);
+        // Any further parts join the text, separated by single spaces; empty ones drop out.
+        size_t o = 0;
+        for (const char *seg = bar2 + 1; seg <= end;)
+        {
+            const char *stop = (const char *)memchr(seg, '|', end - seg);
+            if (!stop)
+                stop = end;
+            char part[128];
+            trimCopy(part, sizeof(part), seg, stop);
+            if (*part)
+                o += snprintf(line.what + o, o < sizeof(line.what) ? sizeof(line.what) - o : 0, "%s%s", o ? " " : "", part);
+            if (o >= sizeof(line.what))
+                break;
+            seg = stop + 1;
+        }
+    }
+    return true;
+}
+
+// Schedule from SCHEDULE_URL, one screen line per file line (mirrors the designer).
+void drawScheduleFile(const Element &el)
+{
+    const char *msg = nullptr;
+    if (!strlen(SCHEDULE_URL))
+        msg = "No schedule web address set";
+    else if (!haveSchedule)
+        msg = scheduleError ? "Couldn't load the schedule" : "Loading schedule...";
+    if (msg)
+    {
+        char t[64];
+        snprintf(t, sizeof(t), "%s", msg);
+        fitText(el.font, t, sizeof(t), el.width);
+        drawText(el.font, t, el.x, el.y, AL_LEFT, el.color);
+        return;
+    }
+    const char *p = scheduleText;
+    FileLine line;
+    for (int r = 0; r < el.rows && *p;)
+    {
+        if (!nextFileLine(&p, line))
+            continue;
+        int y = el.y + r * el.rowHeight;
+        uint8_t tc = line.hot ? el.highlightColor : el.timeColor, xc = line.hot ? el.highlightColor : el.color;
+        if (line.cols == 1)
+        {
+            fitText(el.font, line.what, sizeof(line.what), el.width);
+            drawText(el.font, line.what, el.x, y, AL_LEFT, xc);
+        }
+        else
+        {
+            if (line.cols == 2)
+            {
+                fitText(el.font, line.days, sizeof(line.days), el.timeWidth - 4);
+                drawText(el.font, line.days, el.x, y, AL_LEFT, tc);
+            }
+            else
+            {
+                fitText(el.font, line.days, sizeof(line.days), el.daysWidth - 4);
+                drawText(el.font, line.days, el.x, y, AL_LEFT, tc);
+                fitText(el.font, line.when, sizeof(line.when), el.timeWidth - el.daysWidth - 4);
+                drawText(el.font, line.when, el.x + el.daysWidth, y, AL_LEFT, tc);
+            }
+            fitText(el.font, line.what, sizeof(line.what), el.width - el.timeWidth);
+            drawText(el.font, line.what, el.x + el.timeWidth, y, AL_LEFT, xc);
+        }
+        r++;
+    }
+}
+
 void drawSchedule(const Element &el, const struct tm &now)
 {
     if (el.box)
         fillColor(el.x - el.boxPad, el.y - el.boxPad, el.width + 2 * el.boxPad, el.boxHeight + 2 * el.boxPad,
                   el.boxColor);
+    if (SCHEDULE_FROM_URL)
+    {
+        drawScheduleFile(el);
+        return;
+    }
     static const char DAY_LETTERS[] = "MTWTFSS";
     int wday = (now.tm_wday + 6) % 7; // 0 = Monday
     int nowMin = now.tm_hour * 60 + now.tm_min;
@@ -486,9 +673,92 @@ bool fetchWeather()
     return true;
 }
 
-// Connects to WiFi, sets the RTC from NTP and fetches weather.
+// Collects a download, keeping the first SCHEDULE_MAX_BYTES (HTTPClient handles chunked replies).
+struct CappedBuffer : Stream
+{
+    uint8_t *buf;
+    size_t n = 0, cap;
+    CappedBuffer(uint8_t *b, size_t c) : buf(b), cap(c) {}
+    size_t write(uint8_t c) override
+    {
+        if (n < cap)
+            buf[n++] = c;
+        return 1;
+    }
+    size_t write(const uint8_t *b, size_t len) override
+    {
+        size_t k = len < cap - n ? len : cap - n;
+        memcpy(buf + n, b, k);
+        n += k;
+        return len;
+    }
+    int available() override { return 0; }
+    int read() override { return -1; }
+    int peek() override { return -1; }
+    void flush() override {}
+};
+
+void loadSchedule()
+{
+    Preferences prefs;
+    prefs.begin("inkplate", true);
+    haveSchedule = prefs.getBool("schedOk", false);
+    size_t n = haveSchedule ? prefs.getBytes("sched", scheduleText, SCHEDULE_MAX_BYTES) : 0;
+    scheduleText[n] = 0;
+    prefs.end();
+}
+
+// Reads SCHEDULE_URL and keeps it (in RAM and flash) if the read worked.
+bool fetchSchedule()
+{
+    WiFiClientSecure secure;
+    secure.setInsecure();
+    WiFiClient plain;
+    bool https = strncmp(SCHEDULE_URL, "https:", 6) == 0;
+    HTTPClient http;
+    http.setTimeout(20000);
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    if (!(https ? http.begin(secure, SCHEDULE_URL) : http.begin(plain, SCHEDULE_URL)))
+        return false;
+    int code = http.GET();
+    if (code != HTTP_CODE_OK)
+    {
+        Serial.printf("Schedule update failed: HTTP %d\n", code);
+        http.end();
+        return false;
+    }
+    static uint8_t raw[SCHEDULE_MAX_BYTES];
+    CappedBuffer body(raw, sizeof(raw));
+    int got = http.writeToStream(&body);
+    http.end();
+    if (got < 0 && body.n == 0)
+    {
+        Serial.printf("Schedule update failed: %s\n", HTTPClient::errorToString(got).c_str());
+        return false;
+    }
+    const uint8_t *start = raw;
+    size_t len = body.n;
+    if (len >= 3 && raw[0] == 0xEF && raw[1] == 0xBB && raw[2] == 0xBF) // byte order mark
+        start += 3, len -= 3;
+    size_t n = cleanScheduleText(start, len, scheduleText, SCHEDULE_MAX_BYTES);
+    haveSchedule = true;
+    Preferences prefs;
+    prefs.begin("inkplate", false);
+    prefs.putBytes("sched", scheduleText, n);
+    prefs.putBool("schedOk", true);
+    prefs.end();
+    return true;
+}
+
+bool scheduleDue()
+{
+    return SCHEDULE_FROM_URL && strlen(SCHEDULE_URL) && display.rtc.getEpoch() >= nextScheduleUtc;
+}
+
+// Connects to WiFi; sets the RTC from NTP and fetches weather when that's due (or
+// first is set), and reads the schedule file when that's due.
 // Returns true if the RTC now holds a good time.
-bool goOnline()
+bool goOnline(bool first)
 {
     if (!strlen(WIFI_SSID))
         return display.rtc.isSet();
@@ -502,26 +772,41 @@ bool goOnline()
     {
         Serial.println("WiFi failed");
         WiFi.mode(WIFI_OFF);
-        nextFetchUtc = display.rtc.getEpoch() + 5 * 60; // try again in 5 minutes
+        uint32_t now = display.rtc.getEpoch();
+        if (first || now >= nextFetchUtc)
+            nextFetchUtc = now + 5 * 60; // try again in 5 minutes
+        if (scheduleDue())
+            nextScheduleUtc = now + 5 * 60;
         return display.rtc.isSet();
     }
 
-    // NTP gives UTC; the RTC keeps UTC and the zone offset is applied when drawing.
-    configTime(0, 0, "pool.ntp.org");
-    t0 = millis();
-    while (time(nullptr) < 1700000000 && millis() - t0 < 10000)
-        delay(100);
-    if (time(nullptr) >= 1700000000)
-        display.rtc.setEpoch(time(nullptr));
-
-    uint32_t now = display.rtc.getEpoch();
-    nextFetchUtc = now + WEATHER_MINUTES * 60;
-    if (strlen(OPENWEATHER_KEY))
+    if (first || display.rtc.getEpoch() >= nextFetchUtc)
     {
-        if (fetchWeather())
-            lastWeatherUtc = now;
-        else
-            nextFetchUtc = now + 5 * 60;
+        // NTP gives UTC; the RTC keeps UTC and the zone offset is applied when drawing.
+        configTime(0, 0, "pool.ntp.org");
+        t0 = millis();
+        while (time(nullptr) < 1700000000 && millis() - t0 < 10000)
+            delay(100);
+        if (time(nullptr) >= 1700000000)
+            display.rtc.setEpoch(time(nullptr));
+
+        uint32_t now = display.rtc.getEpoch();
+        nextFetchUtc = now + WEATHER_MINUTES * 60;
+        if (strlen(OPENWEATHER_KEY))
+        {
+            if (fetchWeather())
+                lastWeatherUtc = now;
+            else
+                nextFetchUtc = now + 5 * 60;
+        }
+    }
+
+    if (scheduleDue())
+    {
+        // A failed read keeps the last schedule on screen and tries again in 5 minutes.
+        bool ok = fetchSchedule();
+        scheduleError = !ok;
+        nextScheduleUtc = display.rtc.getEpoch() + (ok ? SCHEDULE_REFRESH_MINUTES * 60 : 5 * 60);
     }
 
     WiFi.disconnect(true);
@@ -551,6 +836,8 @@ void setup()
     Serial.begin(115200);
     display.begin();
     display.rtc.clearAlarmFlag();
+    if (SCHEDULE_FROM_URL)
+        loadSchedule();
 
     bool woke = esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0;
     bool onlineFirst = !woke || !display.rtc.isSet();
@@ -562,7 +849,7 @@ void setup()
     }
 
     // Power-up: get the time (and weather) before the first draw.
-    if (onlineFirst && !goOnline())
+    if (onlineFirst && !goOnline(true))
     {
         drawMessage("No clock time yet", "Check WiFi settings in secrets.h");
         esp_sleep_enable_timer_wakeup(5ULL * 60 * 1000000); // retry in 5 minutes
@@ -599,9 +886,9 @@ void setup()
         Serial.printf("Refresh took %lu ms, lead now %lu ms\n", millis(), l);
     }
 
-    // Weather and NTP happen after the refresh so they don't delay the clock.
-    if (!onlineFirst && display.rtc.getEpoch() >= nextFetchUtc)
-        goOnline();
+    // Weather, NTP and the schedule file happen after the refresh so they don't delay the clock.
+    if (!onlineFirst && (display.rtc.getEpoch() >= nextFetchUtc || scheduleDue()))
+        goOnline(false);
 
     // Next change: every minute on the main screen or a photo with the clock
     // over it; otherwise when this photo's time is up.

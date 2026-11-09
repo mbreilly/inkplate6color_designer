@@ -11,6 +11,11 @@ static const uint8_t BG_INK = INKPLATE_WHITE;
 static const char *const BG_IMAGE = nullptr;
 static const uint8_t GALLERY_FILL = INKPLATE_WHITE;
 
+// Schedule source: false = the SCHEDULE entries below, true = a text file read from SCHEDULE_URL.
+#define SCHEDULE_FROM_URL false
+#define SCHEDULE_URL ""
+static const uint16_t SCHEDULE_REFRESH_MINUTES = 15;
+
 // Every color is an 8x8 tile of ink numbers, repeated across the screen.
 static const uint8_t PATTERNS[][64] = {
     {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // Black

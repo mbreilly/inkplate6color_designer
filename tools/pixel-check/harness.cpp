@@ -20,6 +20,7 @@ static const char *WEEKDAYS[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Th
 static const char *MONTHS[] = {"January","February","March","April","May","June","July","August","September","October","November","December"};
 struct Weather { int temp, feels, hi, lo, humidity, wind; char desc[48], main[24], city[32]; };
 int32_t tzOffset = 0; uint32_t lastWeatherUtc = 0; Weather wx;
+static const size_t SCHEDULE_MAX_BYTES = 4096; char scheduleText[SCHEDULE_MAX_BYTES + 1]; bool haveSchedule = false, scheduleError = false;
 bool drawImageFile(const char *) { return false; }
 #include "draw_part.inc"
 int main(int argc, char **argv) {
@@ -27,6 +28,11 @@ int main(int argc, char **argv) {
   time_t e = timegm(&t); gmtime_r(&e, &t);
   lastWeatherUtc = e;
   wx.temp = 68; strcpy(wx.desc, "Partly cloudy");
+  if (argc > 2) { // optional: a schedule file, as SCHEDULE_URL would return it
+    static uint8_t raw[SCHEDULE_MAX_BYTES]; FILE *sf = fopen(argv[2], "rb"); size_t n = fread(raw, 1, sizeof(raw), sf); fclose(sf);
+    size_t skip = n >= 3 && raw[0] == 0xEF && raw[1] == 0xBB && raw[2] == 0xBF ? 3 : 0;
+    cleanScheduleText(raw + skip, n - skip, scheduleText, SCHEDULE_MAX_BYTES); haveSchedule = true;
+  }
   drawMain(t);
   FILE *f = fopen(argv[1], "wb"); fwrite(display.px, 1, sizeof(display.px), f); fclose(f);
 }
