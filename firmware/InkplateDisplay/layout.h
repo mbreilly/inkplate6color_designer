@@ -4,6 +4,9 @@
 
 #define HOUR24 false
 #define SHOW_AMPM true
+// true: the clock shows the time of day in words (DAY_PARTS below) and the screen
+// only redraws when something on it changes.
+#define CLOCK_WORDS true
 #define WEATHER_UNITS "imperial"
 static const uint16_t MAIN_MINUTES = 10;
 static const uint16_t WEATHER_MINUTES = 10;
@@ -30,17 +33,17 @@ static const uint8_t PATTERNS[][64] = {
 };
 
 static const Element ELEMENTS[] = {
-    {EL_CLOCK, 24, 18, AL_LEFT, &font_orbitron_74b, INKPLATE_BLACK, "", "",
+    {EL_CLOCK, 26, 26, AL_LEFT, &font_sans_44b, INKPLATE_BLACK, "", "",
      0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, false}, // Clock
-    {EL_DATE, 28, 110, AL_LEFT, &font_sans_28, INKPLATE_BLUE, "{weekday}, {month} {day}", "",
+    {EL_DATE, 26, 120, AL_LEFT, &font_sans_40, INKPLATE_BLUE, "{weekday}, {month} {day}", "",
      0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, false}, // Date
     {EL_TEMP, 576, 20, AL_RIGHT, &font_oswald_56b, INKPLATE_ORANGE, "{temp}{unit}", "",
      0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, false}, // Temperature
     {EL_TEMP, 576, 94, AL_RIGHT, &font_sans_24, INKPLATE_BLUE, "{desc}", "",
      0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, false}, // Conditions
-    {EL_TEXT, 28, 158, AL_LEFT, &font_sans_22b, INKPLATE_BLUE, "My week", "",
+    {EL_TEXT, 28, 180, AL_LEFT, &font_sans_22b, INKPLATE_BLUE, "My week", "",
      0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, false}, // Schedule heading
-    {EL_SCHEDULE, 28, 196, AL_LEFT, &font_sans_26, INKPLATE_BLACK, "", "",
+    {EL_SCHEDULE, 28, 216, AL_LEFT, &font_sans_26, INKPLATE_BLACK, "", "",
      INKPLATE_BLUE, INKPLATE_RED, 5, 35, 112, 240, 544, false, INKPLATE_YELLOW, 8, 165, true}, // Schedule
     {EL_TEXT, 24, 418, AL_LEFT, &font_sans_18, INKPLATE_BLUE, "email : mbreilly@hep.upenn.edu", "",
      0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, false}, // Email
@@ -64,6 +67,18 @@ static const Photo PHOTOS[] = {
     {"/gallery/photo02.bin", 2},
 };
 static const int PHOTO_COUNT = 2;
+
+// Times of day for CLOCK_WORDS: minutes after midnight it starts, name. Sorted by start.
+static const DayPart DAY_PARTS[] = {
+    {300, "Early morning"},
+    {480, "Morning"},
+    {720, "Midday"},
+    {780, "Afternoon"},
+    {1020, "Evening"},
+    {1200, "Night"},
+    {1380, "Late night"},
+};
+static const int DAY_PART_COUNT = 7;
 
 // WiFi icon bitmaps (1 bit per pixel, rows of WIFI_ICON_SIZE bits, high bit first).
 static const int WIFI_ICON_SIZE = 24;

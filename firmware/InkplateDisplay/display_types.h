@@ -79,6 +79,14 @@ struct SchedEntry
     const char *text;
 };
 
+// A time of day for the words clock: shown from start (minutes after midnight)
+// until the next one starts.
+struct DayPart
+{
+    int16_t start;
+    const char *text;
+};
+
 struct Photo
 {
     const char *file; // on the microSD card

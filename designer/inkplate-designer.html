@@ -260,6 +260,15 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
         <div class="card">
           <h2>Time format</h2>
           <div class="fields">
+            <label class="field"><span>The clock shows</span><select id="t-style"><option value="time">The time (10:05 AM)</option><option value="words">Time of day in words</option></select></label>
+          </div>
+          <div id="words-box">
+            <p class="note">Each name shows from its start time until the next one starts. The screen only redraws when the name changes, at midnight for the date, when a schedule entry starts or ends, and when the weather or schedule is fetched, so it flashes far less often. Raising "Refresh weather every" above cuts the flashing further.</p>
+            <div id="parts-list" class="list"></div>
+            <div class="toolbar"><button class="btn small" id="add-part">+ Add a time of day</button></div>
+          </div>
+          <div id="time-box">
+          <div class="fields">
             <label class="check"><input type="checkbox" id="h24"> 24-hour time</label>
             <label class="check"><input type="checkbox" id="ampm"> Show AM / PM</label>
           </div>
@@ -267,6 +276,7 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
             <label class="field"><span>Redraw the clock every</span><select id="t-update"><option value="1">1 minute</option><option value="2">2 minutes</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option></select></label>
           </div>
           <p class="note">The 6COLOR panel can only redraw the whole screen: each update is a full refresh of about 12–15 seconds with flashing, even when only the time changed. Redrawing less often means less flashing and longer battery life. The clock then changes on the hour and every N minutes after (with 5 minutes: 10:00, 10:05, 10:10…), and the device wakes early so each change shows up on time. Weather and schedule changes show at the next redraw.</p>
+          </div>
         </div>
         <div class="card">
           <h2>Weather inks</h2>
@@ -822,6 +832,19 @@ void drawSchedule(const Element &el, const struct tm &now)
     }
 }
 
+// The time of day in words for a minute after midnight (DAY_PARTS is sorted;
+// before the first start, the last one is still running from the day before).
+const char *dayPartAt(int minuteOfDay)
+{
+    if (DAY_PART_COUNT == 0)
+        return "";
+    const char *t = DAY_PARTS[DAY_PART_COUNT - 1].text;
+    for (int i = 0; i < DAY_PART_COUNT; i++)
+        if (DAY_PARTS[i].start <= minuteOfDay)
+            t = DAY_PARTS[i].text;
+    return t;
+}
+
 void drawElement(const Element &el, const struct tm &now)
 {
     char buf[160];
@@ -831,7 +854,10 @@ void drawElement(const Element &el, const struct tm &now)
         drawSchedule(el, now);
         return;
     case EL_CLOCK:
-        fmtTime(buf, sizeof(buf), now.tm_hour, now.tm_min, SHOW_AMPM);
+        if (CLOCK_WORDS)
+            snprintf(buf, sizeof(buf), "%s", dayPartAt(now.tm_hour * 60 + now.tm_min));
+        else
+            fmtTime(buf, sizeof(buf), now.tm_hour, now.tm_min, SHOW_AMPM);
         break;
     case EL_DATE:
         fill(buf, sizeof(buf), el.text, dateToken, now);
@@ -1086,15 +1112,16 @@ bool fetchSchedule()
     return true;
 }
 
-bool scheduleDue()
+bool scheduleDue(uint32_t slack)
 {
-    return SCHEDULE_FROM_URL && strlen(SCHEDULE_URL) && display.rtc.getEpoch() >= nextScheduleUtc;
+    return SCHEDULE_FROM_URL && strlen(SCHEDULE_URL) && display.rtc.getEpoch() + slack >= nextScheduleUtc;
 }
 
 // Connects to WiFi; sets the RTC from NTP and fetches weather when that's due (or
 // first is set), and reads the schedule file when that's due.
 // Returns true if the RTC now holds a good time.
-bool goOnline(bool first)
+// slack: also count things due within that many seconds as due.
+bool goOnline(bool first, uint32_t slack)
 {
     if (!strlen(WIFI_SSID))
     {
@@ -1113,15 +1140,15 @@ bool goOnline(bool first)
         wifiOk = false;
         WiFi.mode(WIFI_OFF);
         uint32_t now = display.rtc.getEpoch();
-        if (first || now >= nextFetchUtc)
+        if (first || now + slack >= nextFetchUtc)
             nextFetchUtc = now + 5 * 60; // try again in 5 minutes
-        if (scheduleDue())
+        if (scheduleDue(slack))
             nextScheduleUtc = now + 5 * 60;
         return display.rtc.isSet();
     }
 
     wifiOk = true;
-    if (first || display.rtc.getEpoch() >= nextFetchUtc)
+    if (first || display.rtc.getEpoch() + slack >= nextFetchUtc)
     {
         // NTP gives UTC; the RTC keeps UTC and the zone offset is applied when drawing.
         configTime(0, 0, "pool.ntp.org");
@@ -1142,7 +1169,7 @@ bool goOnline(bool first)
         }
     }
 
-    if (scheduleDue())
+    if (scheduleDue(slack))
     {
         // A failed read keeps the last schedule on screen and tries again in 5 minutes.
         bool ok = fetchSchedule();
@@ -1165,6 +1192,40 @@ void sleepUntil(uint32_t wakeUtc)
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_39, 0); // RTC alarm pin, active low
     Serial.flush();
     esp_deep_sleep_start();
+}
+
+// Words clock: the next local minute (since 1970) when the screen needs redrawing:
+// a new time of day, midnight (the date), a schedule entry starting or ending
+// today, or weather / the schedule file coming due.
+uint32_t nextChangeMinute(uint32_t minute)
+{
+    uint32_t day = minute - minute % 1440, m = minute % 1440;
+    uint32_t best = day + 1440;
+    for (int i = 0; i < DAY_PART_COUNT; i++)
+        if ((uint32_t)DAY_PARTS[i].start > m && day + DAY_PARTS[i].start < best)
+            best = day + DAY_PARTS[i].start;
+    if (!SCHEDULE_FROM_URL)
+    {
+        int wday = (day / 1440 + 3) % 7; // 1970-01-01 was a Thursday; 0 = Monday
+        for (int i = 0; i < SCHEDULE_COUNT; i++)
+        {
+            const SchedEntry &e = SCHEDULE[i];
+            if (e.kind != ENTRY_RANGE || !(e.days & (1 << wday)))
+                continue;
+            if ((uint32_t)e.start > m && day + e.start < best)
+                best = day + e.start;
+            if ((uint32_t)e.end > m && day + e.end < best)
+                best = day + e.end;
+        }
+    }
+    uint32_t due[2] = {nextFetchUtc, SCHEDULE_FROM_URL && strlen(SCHEDULE_URL) ? nextScheduleUtc : 0};
+    for (uint32_t u : due)
+    {
+        uint32_t dm = (uint32_t)(((int64_t)u + tzOffset + 59) / 60);
+        if (u && dm > minute && dm < best)
+            best = dm;
+    }
+    return best;
 }
 
 uint32_t leadSec(int screen)
@@ -1190,11 +1251,20 @@ void setup()
     }
 
     // Power-up: get the time (and weather) before the first draw.
-    if (onlineFirst && !goOnline(true))
+    if (onlineFirst && !goOnline(true, 0))
     {
         drawMessage("No clock time yet", "Check WiFi settings in secrets.h");
         esp_sleep_enable_timer_wakeup(5ULL * 60 * 1000000); // retry in 5 minutes
         esp_deep_sleep_start();
+    }
+
+    // With the words clock nothing needs to land on the minute, so fetch first and
+    // show fresh weather and schedule in this refresh.
+    bool wentOnline = onlineFirst;
+    if (CLOCK_WORDS && !onlineFirst && (display.rtc.getEpoch() + 120 >= nextFetchUtc || scheduleDue(120)))
+    {
+        goOnline(false, 120);
+        wentOnline = true;
     }
 
     // Show what will be current once the refresh finishes. The photo lead is
@@ -1220,7 +1290,7 @@ void setup()
     display.display();
 
     // Learn how long wake + draw + refresh takes on clean wakes (no WiFi).
-    if (!onlineFirst)
+    if (!wentOnline)
     {
         uint32_t &l = leadMs[screen >= 0];
         l = (l * 3 + millis() + 1000) / 4;
@@ -1228,8 +1298,8 @@ void setup()
     }
 
     // Weather, NTP and the schedule file happen after the refresh so they don't delay the clock.
-    if (!onlineFirst && (display.rtc.getEpoch() >= nextFetchUtc || scheduleDue()))
-        goOnline(false);
+    if (!wentOnline && (display.rtc.getEpoch() >= nextFetchUtc || scheduleDue(0)))
+        goOnline(false, 0);
 
     // Next change: on the main screen or a photo with the clock over it, the
     // next multiple of UPDATE_MINUTES (or the end of this stretch, if sooner);
@@ -1239,7 +1309,7 @@ void setup()
     uint32_t nextMinute = segEnd;
     if (clockShown)
     {
-        nextMinute = (minute / step + 1) * step;
+        nextMinute = CLOCK_WORDS ? nextChangeMinute(minute) : (minute / step + 1) * step;
         if (PHOTO_COUNT > 0 && segEnd > minute && segEnd < nextMinute)
             nextMinute = segEnd;
     }
@@ -1336,6 +1406,14 @@ struct SchedEntry
     uint8_t kind;
     int16_t start, end; // minutes after midnight
     uint8_t days;       // bit 0 = Monday ... bit 6 = Sunday
+    const char *text;
+};
+
+// A time of day for the words clock: shown from start (minutes after midnight)
+// until the next one starts.
+struct DayPart
+{
+    int16_t start;
     const char *text;
 };
 
@@ -1459,19 +1537,23 @@ Sa | 10:00am | Farmers market
 Next week | Conference in Chicago
 !Office closed Nov 26 and 27
 `;
+const DEFAULT_PARTS = [
+  { start: "05:00", text: "Early morning" }, { start: "08:00", text: "Morning" }, { start: "12:00", text: "Midday" },
+  { start: "13:00", text: "Afternoon" }, { start: "17:00", text: "Evening" }, { start: "20:00", text: "Night" }, { start: "23:00", text: "Late night" },
+];
 function exampleState() {
   return {
-    v: 6,
+    v: 7,
     previewDay: "",
     background: { ink: "white", image: null, imageName: "" },
-    time: { hour24: false, ampm: true },
+    time: { hour24: false, ampm: true, style: "words", parts: DEFAULT_PARTS.map((p) => ({ ...p })) },
     elements: [
-      { id: "clock", type: "clock", name: "Clock", x: 24, y: 18, align: "left", font: { family: "Orbitron", size: 74, weight: 700 }, color: "black", visible: true },
-      { id: "date", type: "date", name: "Date", x: 28, y: 110, align: "left", font: { family: "sans", size: 28, weight: 400 }, color: "blue", visible: true, format: "{weekday}, {month} {day}" },
+      { id: "clock", type: "clock", name: "Clock", x: 26, y: 26, align: "left", font: { family: "sans", size: 44, weight: 700 }, color: "black", visible: true },
+      { id: "date", type: "date", name: "Date", x: 26, y: 120, align: "left", font: { family: "sans", size: 40, weight: 400 }, color: "blue", visible: true, format: "{weekday}, {month} {day}" },
       { id: "temp", type: "temp", name: "Temperature", x: 576, y: 20, align: "right", font: { family: "Oswald", size: 56, weight: 700 }, color: "orange", visible: true, format: "{temp}{unit}" },
       { id: "cond", type: "temp", name: "Conditions", x: 576, y: 94, align: "right", font: { family: "sans", size: 24, weight: 400 }, color: "blue", visible: true, format: "{desc}" },
-      { id: "heading", type: "text", name: "Schedule heading", x: 28, y: 158, align: "left", font: { family: "sans", size: 22, weight: 700 }, color: "blue", visible: true, text: "My week" },
-      { id: "sched", type: "schedule", name: "Schedule", x: 28, y: 196, align: "left", font: { family: "sans", size: 26, weight: 400 }, color: "black", visible: true,
+      { id: "heading", type: "text", name: "Schedule heading", x: 28, y: 180, align: "left", font: { family: "sans", size: 22, weight: 700 }, color: "blue", visible: true, text: "My week" },
+      { id: "sched", type: "schedule", name: "Schedule", x: 28, y: 216, align: "left", font: { family: "sans", size: 26, weight: 400 }, color: "black", visible: true,
         timeColor: "blue", highlightColor: "red", rows: 5, rowGap: 10, daysWidth: 112, timeWidth: 240, width: 544, box: false, boxColor: "yellow", boxPad: 8, highlight: true },
       { id: "email", type: "text", name: "Email", x: 24, y: 418, align: "left", font: { family: "sans", size: 18, weight: 400 }, color: "blue", visible: true, text: "email : mbreilly@hep.upenn.edu" },
       { id: "batt", type: "battery", name: "Battery", x: 300, y: 418, align: "center", font: { family: "sans", size: 18, weight: 400 }, color: "black", visible: false, format: "{volts} V" },
@@ -1608,7 +1690,7 @@ const toMin = (t) => { const [h, m] = String(t || "0:0").split(":").map(Number);
 function elText(el, now) {
   const h24 = S.time.hour24, ampm = S.time.ampm;
   switch (el.type) {
-    case "clock": { const m = now.getMinutes(); return fmtTime(now.getHours(), m - m % updateMinutes(), h24, ampm); }
+    case "clock": { if (S.time.style === "words") return dayPartAt(now.getHours() * 60 + now.getMinutes()); const m = now.getMinutes(); return fmtTime(now.getHours(), m - m % updateMinutes(), h24, ampm); }
     case "date": return fill(el.format, dateValues(now));
     case "temp": return fill(el.format, weatherValues());
     case "battery": return fill(el.format, { volts: (Number(S.sample.volts) || 0).toFixed(2) });
@@ -1821,6 +1903,15 @@ function scheduleLines(el, now) {
     const hot = today && (kind === "allday" || (kind === "range" && (end > start ? start <= nm && nm < end : nm >= start || nm < end)));
     return { days, when, what, hot, layout: "manual" };
   });
+}
+// Times of day, sorted by start; each runs until the next one starts (the last wraps past midnight).
+const sortedParts = () => (S.time.parts || []).filter((p) => p.text && p.text.trim() && /^\d\d:\d\d$/.test(p.start || ""))
+  .map((p) => ({ start: toMin(p.start), text: p.text.trim() })).sort((a, b) => a.start - b.start);
+function dayPartAt(m) {
+  const parts = sortedParts(); if (!parts.length) return "";
+  let t = parts[parts.length - 1].text;
+  for (const p of parts) if (p.start <= m) t = p.text;
+  return t;
 }
 // How often the device redraws; the clock shows the last multiple of it.
 const updateMinutes = () => [1, 2, 5, 10, 15, 30].includes(Number(S.timing.updateMinutes)) ? Number(S.timing.updateMinutes) : 1;
@@ -2108,6 +2199,19 @@ function renderProps() {
   renderSchedColors();
   renderWeatherColors();
 }
+function showTimeStyle() {
+  const w = S.time.style === "words";
+  $("#words-box").hidden = !w; $("#time-box").hidden = w;
+}
+function renderParts() {
+  const list = $("#parts-list"); list.innerHTML = "";
+  (S.time.parts || []).forEach((p, i) => {
+    const t = h("input", { type: "time", id: `tp-t-${i}`, value: p.start, "aria-label": "Starts at", oninput: () => { p.start = t.value; changed(); } });
+    const x = h("input", { type: "text", id: `tp-x-${i}`, class: "what", value: p.text, "aria-label": "Name", oninput: () => { p.text = x.value; changed(); } });
+    const del = h("button", { class: "btn small", "aria-label": `Remove ${p.text}`, onclick: () => { S.time.parts.splice(i, 1); renderParts(); changed(); } }, "✕");
+    list.append(h("div", { class: "sched-row" }, h("span", { class: "to" }, "from"), t, x, del));
+  });
+}
 function renderWeatherColors() {
   const box = $("#weather-colors"); box.innerHTML = "";
   const els = S.elements.filter((e) => e.type === "temp");
@@ -2295,6 +2399,8 @@ function bindStatic() {
   bind("#s-city", () => S.sample.city, (v) => S.sample.city = v);
   bind("#s-volts", () => S.sample.volts, (v) => S.sample.volts = v);
   bind("#s-wifi", () => S.sample.wifi !== false, (v) => S.sample.wifi = v, "change");
+  bind("#t-style", () => S.time.style || "time", (v) => { S.time.style = v; showTimeStyle(); }, "change");
+  showTimeStyle(); renderParts();
   bind("#t-update", () => String(updateMinutes()), (v) => S.timing.updateMinutes = Number(v), "change");
   bind("#s-url", () => S.schedule.url, (v) => S.schedule.url = v.trim());
   bind("#s-refresh", () => S.schedule.refreshMinutes, (v) => S.schedule.refreshMinutes = clamp(Math.round(Number(v)) || 15, 1, 1440));
@@ -2315,6 +2421,7 @@ $("#bg-file").addEventListener("change", async (ev) => {
   catch (e) { toast("That file couldn't be read as an image. Try a JPG or PNG."); }
 });
 $("#bg-clear").onclick = () => { S.background.image = null; S.background.imageName = ""; $("#bg-name").textContent = "No image"; changed(); };
+$("#add-part").onclick = () => { S.time.parts.push({ start: "12:00", text: "New time of day" }); renderParts(); changed(); };
 $("#add-text").onclick = () => {
   const id = "t" + Date.now().toString(36);
   S.elements.push({ id, type: "text", name: "Text label", x: 300, y: 200, align: "center", font: { family: "sans", size: 32, weight: 400 }, color: "black", visible: true, text: "Hello" });
@@ -2403,11 +2510,25 @@ function merge(base, data) {
     if (sc && sc.y === 172) sc.y = 196;
     out.v = 5;
   }
+  if (out.v < 7) {
+    // v7: time of day in words, bigger date. Only touch the clock and date if they're still at the old defaults.
+    const ck = out.elements.find((e) => e.id === "clock"), dt = out.elements.find((e) => e.id === "date");
+    if (ck && ck.font.family === "Orbitron" && ck.font.size === 74 && ck.x === 24 && ck.y === 18) Object.assign(ck, { x: 26, y: 26, font: { family: "sans", size: 44, weight: 700 } });
+    if (dt && dt.font.size === 28 && dt.x === 28 && dt.y === 110) {
+      // The bigger date goes below the weather conditions, and the schedule moves down to make room.
+      Object.assign(dt, { x: 26, y: 120, font: { ...dt.font, size: 40 } });
+      const hd = out.elements.find((e) => e.id === "heading"), sc = out.elements.find((e) => e.type === "schedule");
+      if (hd && hd.y === 158) hd.y = 180;
+      if (sc && sc.y === 196) sc.y = 216;
+    }
+  }
+  if (!Array.isArray(out.time.parts) || !out.time.parts.length) out.time.parts = DEFAULT_PARTS.map((p) => ({ ...p }));
   if (out.v < 6) {
     // v6: WiFi status icon bottom row, between the email line and "Updated".
     if (!out.elements.some((e) => e.type === "wifi")) out.elements.splice(Math.max(0, out.elements.findIndex((e) => e.type === "updated")), 0, { ...base.elements.find((e) => e.id === "wifi") });
     out.v = 6;
   }
+  out.v = Math.max(out.v, 7);
   out.previewDay = "";
   return out;
 }
@@ -2508,6 +2629,7 @@ function layoutH() {
   const ovFont = ovVisible ? ov.font : (usedFonts()[0] || ov.font);
   const colors = colorTable(), ink = colors.c;
   const elementsC = els.map((e) => elementC(e, ink, ovFont)).join("\n");
+  const parts = sortedParts();
   const wifiEl = els.find((e) => e.type === "wifi"), ws = wifiEl ? wifiSize(wifiEl) : 0;
   const bitsC = (on) => {
     if (!ws) return "0";
@@ -2527,6 +2649,9 @@ function layoutH() {
 
 #define HOUR24 ${S.time.hour24 ? "true" : "false"}
 #define SHOW_AMPM ${S.time.ampm ? "true" : "false"}
+// true: the clock shows the time of day in words (DAY_PARTS below) and the screen
+// only redraws when something on it changes.
+#define CLOCK_WORDS ${S.time.style === "words" ? "true" : "false"}
 #define WEATHER_UNITS ${cstr(S.weather.units)}
 static const uint16_t MAIN_MINUTES = ${S.timing.mainMinutes};
 static const uint16_t WEATHER_MINUTES = ${S.timing.weatherMinutes};
@@ -2560,6 +2685,12 @@ static const Photo PHOTOS[] = {
 ${photos.map((p) => `    {${cstr(p.file)}, ${p.minutes}},`).join("\n") || "    {\"\", 0},"}
 };
 static const int PHOTO_COUNT = ${photos.length};
+
+// Times of day for CLOCK_WORDS: minutes after midnight it starts, name. Sorted by start.
+static const DayPart DAY_PARTS[] = {
+${parts.map((p) => `    {${p.start}, ${cstr(p.text)}},`).join("\n") || '    {0, ""},'}
+};
+static const int DAY_PART_COUNT = ${parts.length};
 
 // WiFi icon bitmaps (1 bit per pixel, rows of WIFI_ICON_SIZE bits, high bit first).
 static const int WIFI_ICON_SIZE = ${ws};

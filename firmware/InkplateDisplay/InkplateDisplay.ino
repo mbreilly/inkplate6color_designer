@@ -489,6 +489,19 @@ void drawSchedule(const Element &el, const struct tm &now)
     }
 }
 
+// The time of day in words for a minute after midnight (DAY_PARTS is sorted;
+// before the first start, the last one is still running from the day before).
+const char *dayPartAt(int minuteOfDay)
+{
+    if (DAY_PART_COUNT == 0)
+        return "";
+    const char *t = DAY_PARTS[DAY_PART_COUNT - 1].text;
+    for (int i = 0; i < DAY_PART_COUNT; i++)
+        if (DAY_PARTS[i].start <= minuteOfDay)
+            t = DAY_PARTS[i].text;
+    return t;
+}
+
 void drawElement(const Element &el, const struct tm &now)
 {
     char buf[160];
@@ -498,7 +511,10 @@ void drawElement(const Element &el, const struct tm &now)
         drawSchedule(el, now);
         return;
     case EL_CLOCK:
-        fmtTime(buf, sizeof(buf), now.tm_hour, now.tm_min, SHOW_AMPM);
+        if (CLOCK_WORDS)
+            snprintf(buf, sizeof(buf), "%s", dayPartAt(now.tm_hour * 60 + now.tm_min));
+        else
+            fmtTime(buf, sizeof(buf), now.tm_hour, now.tm_min, SHOW_AMPM);
         break;
     case EL_DATE:
         fill(buf, sizeof(buf), el.text, dateToken, now);
@@ -753,15 +769,16 @@ bool fetchSchedule()
     return true;
 }
 
-bool scheduleDue()
+bool scheduleDue(uint32_t slack)
 {
-    return SCHEDULE_FROM_URL && strlen(SCHEDULE_URL) && display.rtc.getEpoch() >= nextScheduleUtc;
+    return SCHEDULE_FROM_URL && strlen(SCHEDULE_URL) && display.rtc.getEpoch() + slack >= nextScheduleUtc;
 }
 
 // Connects to WiFi; sets the RTC from NTP and fetches weather when that's due (or
 // first is set), and reads the schedule file when that's due.
 // Returns true if the RTC now holds a good time.
-bool goOnline(bool first)
+// slack: also count things due within that many seconds as due.
+bool goOnline(bool first, uint32_t slack)
 {
     if (!strlen(WIFI_SSID))
     {
@@ -780,15 +797,15 @@ bool goOnline(bool first)
         wifiOk = false;
         WiFi.mode(WIFI_OFF);
         uint32_t now = display.rtc.getEpoch();
-        if (first || now >= nextFetchUtc)
+        if (first || now + slack >= nextFetchUtc)
             nextFetchUtc = now + 5 * 60; // try again in 5 minutes
-        if (scheduleDue())
+        if (scheduleDue(slack))
             nextScheduleUtc = now + 5 * 60;
         return display.rtc.isSet();
     }
 
     wifiOk = true;
-    if (first || display.rtc.getEpoch() >= nextFetchUtc)
+    if (first || display.rtc.getEpoch() + slack >= nextFetchUtc)
     {
         // NTP gives UTC; the RTC keeps UTC and the zone offset is applied when drawing.
         configTime(0, 0, "pool.ntp.org");
@@ -809,7 +826,7 @@ bool goOnline(bool first)
         }
     }
 
-    if (scheduleDue())
+    if (scheduleDue(slack))
     {
         // A failed read keeps the last schedule on screen and tries again in 5 minutes.
         bool ok = fetchSchedule();
@@ -832,6 +849,40 @@ void sleepUntil(uint32_t wakeUtc)
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_39, 0); // RTC alarm pin, active low
     Serial.flush();
     esp_deep_sleep_start();
+}
+
+// Words clock: the next local minute (since 1970) when the screen needs redrawing:
+// a new time of day, midnight (the date), a schedule entry starting or ending
+// today, or weather / the schedule file coming due.
+uint32_t nextChangeMinute(uint32_t minute)
+{
+    uint32_t day = minute - minute % 1440, m = minute % 1440;
+    uint32_t best = day + 1440;
+    for (int i = 0; i < DAY_PART_COUNT; i++)
+        if ((uint32_t)DAY_PARTS[i].start > m && day + DAY_PARTS[i].start < best)
+            best = day + DAY_PARTS[i].start;
+    if (!SCHEDULE_FROM_URL)
+    {
+        int wday = (day / 1440 + 3) % 7; // 1970-01-01 was a Thursday; 0 = Monday
+        for (int i = 0; i < SCHEDULE_COUNT; i++)
+        {
+            const SchedEntry &e = SCHEDULE[i];
+            if (e.kind != ENTRY_RANGE || !(e.days & (1 << wday)))
+                continue;
+            if ((uint32_t)e.start > m && day + e.start < best)
+                best = day + e.start;
+            if ((uint32_t)e.end > m && day + e.end < best)
+                best = day + e.end;
+        }
+    }
+    uint32_t due[2] = {nextFetchUtc, SCHEDULE_FROM_URL && strlen(SCHEDULE_URL) ? nextScheduleUtc : 0};
+    for (uint32_t u : due)
+    {
+        uint32_t dm = (uint32_t)(((int64_t)u + tzOffset + 59) / 60);
+        if (u && dm > minute && dm < best)
+            best = dm;
+    }
+    return best;
 }
 
 uint32_t leadSec(int screen)
@@ -857,11 +908,20 @@ void setup()
     }
 
     // Power-up: get the time (and weather) before the first draw.
-    if (onlineFirst && !goOnline(true))
+    if (onlineFirst && !goOnline(true, 0))
     {
         drawMessage("No clock time yet", "Check WiFi settings in secrets.h");
         esp_sleep_enable_timer_wakeup(5ULL * 60 * 1000000); // retry in 5 minutes
         esp_deep_sleep_start();
+    }
+
+    // With the words clock nothing needs to land on the minute, so fetch first and
+    // show fresh weather and schedule in this refresh.
+    bool wentOnline = onlineFirst;
+    if (CLOCK_WORDS && !onlineFirst && (display.rtc.getEpoch() + 120 >= nextFetchUtc || scheduleDue(120)))
+    {
+        goOnline(false, 120);
+        wentOnline = true;
     }
 
     // Show what will be current once the refresh finishes. The photo lead is
@@ -887,7 +947,7 @@ void setup()
     display.display();
 
     // Learn how long wake + draw + refresh takes on clean wakes (no WiFi).
-    if (!onlineFirst)
+    if (!wentOnline)
     {
         uint32_t &l = leadMs[screen >= 0];
         l = (l * 3 + millis() + 1000) / 4;
@@ -895,8 +955,8 @@ void setup()
     }
 
     // Weather, NTP and the schedule file happen after the refresh so they don't delay the clock.
-    if (!onlineFirst && (display.rtc.getEpoch() >= nextFetchUtc || scheduleDue()))
-        goOnline(false);
+    if (!wentOnline && (display.rtc.getEpoch() >= nextFetchUtc || scheduleDue(0)))
+        goOnline(false, 0);
 
     // Next change: on the main screen or a photo with the clock over it, the
     // next multiple of UPDATE_MINUTES (or the end of this stretch, if sooner);
@@ -906,7 +966,7 @@ void setup()
     uint32_t nextMinute = segEnd;
     if (clockShown)
     {
-        nextMinute = (minute / step + 1) * step;
+        nextMinute = CLOCK_WORDS ? nextChangeMinute(minute) : (minute / step + 1) * step;
         if (PHOTO_COUNT > 0 && segEnd > minute && segEnd < nextMinute)
             nextMinute = segEnd;
     }
