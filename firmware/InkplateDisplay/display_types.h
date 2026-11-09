@@ -1,6 +1,12 @@
 // Types shared by the generated layout.h and fonts.h. Made by Inkplate 6COLOR Designer.
 #pragma once
+#include <stddef.h>
 #include <stdint.h>
+#include <time.h>
+
+// Looks up one {token} for fill(). Declared here rather than in the .ino because
+// the Arduino build puts function prototypes above anything typedef'd in the sketch.
+typedef bool (*Lookup)(const char *name, char *out, size_t n, const struct tm &now);
 
 // One glyph of a designer font. Pixels are packed row by row, MSB first,
 // starting at byte `offset` of the font's bitmap. The bottom row sits `yoff`

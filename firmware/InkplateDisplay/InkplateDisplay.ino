@@ -151,8 +151,6 @@ void fmtTime(char *out, size_t n, int hour, int minute, bool ampm)
 }
 
 // Replaces {token} in fmt using lookup(); unknown tokens are left as they are.
-typedef bool (*Lookup)(const char *name, char *out, size_t n, const struct tm &now);
-
 void fill(char *out, size_t n, const char *fmt, Lookup lookup, const struct tm &now)
 {
     size_t o = 0;

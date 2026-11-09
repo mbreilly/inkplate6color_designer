@@ -94,16 +94,8 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
 .inks { display: flex; flex-wrap: wrap; gap: 5px; }
 .inks button { width: 26px; height: 26px; border-radius: 50%; border: 1px solid rgb(0 0 0 / .35); cursor: pointer; padding: 0; box-shadow: inset 0 0 0 2px rgb(255 255 255 / .0); }
 .inks button[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: 2px; }
-.picker { display: grid; gap: 8px; }
-.inks .mixbtn { background: conic-gradient(#e33, #ec3, #3c5, #3ae, #63e, #e3a, #e33); }
-.mix { display: grid; gap: 6px; max-width: 280px; }
-.mix[hidden] { display: none; }
-.mixhead { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
-.mixswatch { width: 32px; height: 32px; image-rendering: pixelated; border: 1px solid var(--line); border-radius: 4px; }
-.mixhex { font: 12px var(--f-mono); }
-.mix input[type=range] { -webkit-appearance: none; appearance: none; height: 14px; border-radius: 7px; border: 1px solid var(--line); padding: 0; margin: 0; }
-.mix input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 2px solid #333; box-shadow: 0 0 0 1px #fff; }
-.mix input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 2px solid #333; }
+.picker { display: grid; gap: 6px; }
+.inks.mixes button { border-radius: 6px; }
 .list { display: grid; gap: 6px; }
 .el-row { display: grid; grid-template-columns: auto auto 1fr auto; align-items: center; gap: 10px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); cursor: pointer; }
 .el-row[aria-current="true"] { border-color: var(--accent); background: var(--accent-soft); }
@@ -165,7 +157,7 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
         </div>
       </div>
       <div class="bar" aria-hidden="true"><i id="progress"></i></div>
-      <p class="status" style="margin:0">The preview uses the same bitmap fonts and the same seven inks the Inkplate will. Photos are dithered to those inks, and mixed colors (the rainbow swatch) are drawn as fine patterns of them, exactly as the screen will. Play rotation runs one minute per second and shows the full-screen refresh flash at each change.</p>
+      <p class="status" style="margin:0">The preview uses the same bitmap fonts and the same seven inks the Inkplate will. Photos are dithered to those inks, and the square mixed-color swatches are drawn as fine patterns of them, exactly as the screen will. Play rotation runs one minute per second and shows the full-screen refresh flash at each change.</p>
     </div>
 
     <div class="right">
@@ -881,69 +873,39 @@ function num(obj, key, min, max, after, xy) {
   if (xy) { i.dataset.xy = obj.id; i.dataset.key = key; }
   return i;
 }
-// HSL (0-360, 0-100, 0-100) to and from RGB, for the color sliders.
-function hslToRgb(hh, ss, ll) {
-  const sat = ss / 100, l = ll / 100, a = sat * Math.min(l, 1 - l);
-  const f = (n) => { const k = (n + hh / 30) % 12; return 255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))); };
-  return [f(0), f(8), f(4)];
-}
-function rgbToHsl([r, g, b]) {
-  r /= 255; g /= 255; b /= 255;
-  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
-  let hh = 0, sat = 0;
-  if (d) {
-    sat = d / (1 - Math.abs(2 * l - 1));
-    hh = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
-    hh = (hh * 60 + 360) % 360;
+// Mixes that hold up on this panel: two inks that sit close together, or an ink with
+// white or black. Each is stored as the average of its inks, which patternOf() turns back
+// into exactly that pair.
+const PRESET_MIXES = [
+  ["Light blue", "blue", "white"], ["Purple", "blue", "red"], ["Pink", "red", "white"], ["Gold", "yellow", "orange"],
+  ["Olive", "yellow", "green"], ["Brown", "orange", "black"], ["Navy", "blue", "black"], ["Grey", "black", "white"],
+].map(([name, a, b]) => ({ name, hex: hexOf(inkRGB(a).map((c, k) => (c + inkRGB(b)[k]) / 2)) }));
+// A pattern drawn 2x as a CSS background, so a swatch shows the dots the screen will draw.
+const patternCssCache = new Map();
+function patternCss(v) {
+  if (!isMix(v)) return inkCss(v);
+  let css = patternCssCache.get(v);
+  if (!css) {
+    const cv = document.createElement("canvas"); cv.width = cv.height = 8;
+    const cx = cv.getContext("2d"), img = cx.createImageData(8, 8), pat = patternOf(v);
+    for (let i = 0; i < 64; i++) img.data.set([...INKS[pat[i]].rgb, 255], i * 4);
+    cx.putImageData(img, 0, 0);
+    css = `url(${cv.toDataURL()}) 0 0 / 16px 16px`;
+    patternCssCache.set(v, css);
   }
-  return [Math.round(hh), Math.round(sat * 100), Math.round(l * 100)];
+  return css;
 }
-// The seven ink swatches, plus a "Mix" swatch that opens hue / saturation / lightness
-// sliders for any color. Mixed colors show as the ink pattern the screen will draw.
+// The seven ink swatches, then a row of preset mixes. A mixed color from an older project
+// that isn't a preset stays as it is until another swatch is picked.
 function inkPicker(obj, key, after, idBase) {
   const base = `${idBase || "p-" + (obj.id || "x")}-${key}`;
-  const wrap = h("div", { class: "picker" });
-  const row = h("div", { class: "inks", role: "group", "aria-label": "Color" });
-  const mixBtn = h("button", { type: "button", class: "mixbtn", id: `${base}-mix`, title: "Mix a color", "aria-label": "Mix a color" });
-  const panel = h("div", { class: "mix" });
-  const swatch = h("canvas", { width: 16, height: 16, class: "mixswatch", "aria-hidden": "true" });
-  const hexLabel = h("code", { class: "mixhex" });
-  let hsl = rgbToHsl(colorRGB(obj[key]));
-  const sliders = [["Hue", 360], ["Saturation", 100], ["Lightness", 100]].map(([label, max], i) => {
-    const r = h("input", { type: "range", min: 0, max, step: 1, id: `${base}-${label.toLowerCase()}`, "aria-label": label, value: hsl[i],
-      oninput: () => { hsl[i] = Number(r.value); obj[key] = hexOf(hslToRgb(...hsl)); sync(); render(); save(); },
-      onchange: () => changed(after || "list") });
-    return r;
-  });
-  function paintSliders() {
-    const [hh, ss, ll] = hsl;
-    sliders[0].style.background = `linear-gradient(to right, ${[0, 60, 120, 180, 240, 300, 360].map((d) => `hsl(${d} ${ss}% ${ll}%)`).join(",")})`;
-    sliders[1].style.background = `linear-gradient(to right, hsl(${hh} 0% ${ll}%), hsl(${hh} 100% ${ll}%))`;
-    sliders[2].style.background = `linear-gradient(to right, #000, hsl(${hh} ${ss}% 50%), #fff)`;
-  }
-  function sync() {
-    const v = obj[key], mixed = isMix(v);
-    row.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b === mixBtn ? mixed : !mixed && b.dataset.ink === v)));
-    panel.hidden = !mixed;
-    const pat = patternOf(v), cx = swatch.getContext("2d"), img = cx.createImageData(16, 16);
-    for (let i = 0; i < 256; i++) { const p = INKS[pat[((i >> 4) & 7) * 8 + (i & 7)]].rgb; img.data.set([p[0], p[1], p[2], 255], i * 4); }
-    cx.putImageData(img, 0, 0);
-    hexLabel.textContent = mixed ? v : inkOf(v).name;
-    paintSliders();
-  }
-  for (const ink of INKS) {
-    row.append(h("button", { type: "button", id: `${base}-${ink.id}`, title: ink.name, "aria-label": ink.name, "data-ink": ink.id, style: `background:${inkCss(ink.id)}`,
-      onclick: () => { obj[key] = ink.id; hsl = rgbToHsl(ink.rgb); sliders.forEach((r, i) => r.value = hsl[i]); sync(); changed(after || "list"); } }));
-  }
-  mixBtn.onclick = () => {
-    if (!isMix(obj[key])) obj[key] = hexOf(colorRGB(obj[key]));
-    sync(); changed(after || "list");
-  };
-  row.append(mixBtn);
-  panel.append(h("div", { class: "mixhead" }, swatch, h("span", {}, "On screen: "), hexLabel), ...sliders);
-  wrap.append(row, panel);
-  sync();
-  return wrap;
+  const swatch = (id, name, value) => h("button", { type: "button", id: `${base}-${id}`, title: name, "aria-label": name,
+    "aria-pressed": String(obj[key] === value), style: `background:${patternCss(value)}`,
+    onclick: (ev) => { obj[key] = value; ev.currentTarget.closest(".picker").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === ev.currentTarget))); changed(after || "list"); } });
+  return h("div", { class: "picker" },
+    h("div", { class: "inks", role: "group", "aria-label": "Inks" }, ...INKS.map((ink) => swatch(ink.id, ink.name, ink.id))),
+    h("div", { class: "inks mixes", role: "group", "aria-label": "Mixed colors" },
+      ...PRESET_MIXES.map((m) => swatch("mix-" + m.name.toLowerCase().replace(/ /g, "-"), `${m.name} (mixed dots)`, m.hex))));
 }
 function text(obj, key, after) { const i = h("input", { type: "text", id: `p-${obj.id}-${key}`, value: obj[key] || "", oninput: () => { obj[key] = i.value; changed(after); } }); return i; }
 function fontFields(el) {

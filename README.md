@@ -15,7 +15,7 @@ A browser-based layout designer and matching Arduino firmware for the Soldered I
 
 1. Open `designer/inkplate-designer.html`.
 2. Lay out the screen: drag elements, pick fonts and inks, edit the weekly schedule, and fill in WiFi and OpenWeatherMap settings.
-   Any color setting can also be a mixed color: click the rainbow swatch and use the hue, saturation and lightness sliders. The panel has only seven inks, so a mixed color is drawn as an 8×8 pattern of up to three inks. It looks best on large areas like the background or the schedule panel; small text in a mixed color looks speckled.
+   Under the seven inks, every color setting also has eight mixed colors (light blue, purple, pink, gold, olive, brown, navy and grey). The panel has only seven inks, so each mix is drawn as an even 50/50 dot pattern of two inks. They look best on large areas like the background or the schedule panel; small text in a mixed color looks speckled.
 3. In the Gallery tab, add photos. They're fitted to 600 × 448 and dithered to the 7 inks, and the preview shows how they'll look.
 4. You can also import a project saved from the PyPortal designer. Positions, fonts, colors and photos are converted.
 5. Click Export. The zip has the `InkplateDisplay` sketch folder and an `sdcard` folder. Copy the `sdcard` contents to the root of a FAT32 microSD card.
