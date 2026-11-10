@@ -46,6 +46,7 @@ bool drawImageFile(const char *, ...) { return false; }
 #include "draw_part.inc"
 int main(int argc, char **argv) {
   struct tm t = {}; t.tm_year = 126; t.tm_mon = 9; t.tm_mday = 20; t.tm_hour = 7; t.tm_min = 0;
+  if (getenv("HM")) sscanf(getenv("HM"), "%d:%d", &t.tm_hour, &t.tm_min); // e.g. HM=11:38
   time_t e = timegm(&t); gmtime_r(&e, &t);
   lastWeatherUtc = e;
   if (getenv("WIFI_OFF")) wifiOk = false;

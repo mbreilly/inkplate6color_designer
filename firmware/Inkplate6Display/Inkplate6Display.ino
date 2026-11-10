@@ -531,7 +531,71 @@ void clockText(char *buf, size_t n, const struct tm &now)
     if (CLOCK_WORDS)
         snprintf(buf, n, "%s", dayPartAt(now.tm_hour * 60 + now.tm_min));
     else
-        fmtTime(buf, n, now.tm_hour, now.tm_min, SHOW_AMPM);
+    {
+        // A one-digit hour keeps its cell (" 9:59 AM"), so nothing shifts at 10:00.
+        buf[0] = ' ';
+        fmtTime(buf + 1, n - 1, now.tm_hour, now.tm_min, SHOW_AMPM);
+        if (buf[2] != ':')
+            memmove(buf, buf + 1, strlen(buf + 1) + 1);
+    }
+}
+
+// The time clock lays out in cells: each digit (and a space padding a one-digit
+// hour) gets the widest digit's advance, centered, so the colon and AM/PM never
+// move and a quick update only touches the digits that change. Fills the pen
+// position of each character (relative to the left edge) and returns the count;
+// *width gets the drawn width. The words clock uses plain advances.
+int clockCells(const DFont *f, const char *s, int *pens, int n, int *width)
+{
+    int D = 0;
+    for (char c = '0'; c <= '9'; c++)
+        if (glyphOf(f, c).adv > D)
+            D = glyphOf(f, c).adv;
+    int k = 0, pen = 0, right = 0;
+    for (; s[k] && k < n; k++)
+    {
+        const DGlyph &g = glyphOf(f, s[k]);
+        bool cell = !CLOCK_WORDS && ((s[k] >= '0' && s[k] <= '9') || (s[k] == ' ' && s[k + 1] >= '0' && s[k + 1] <= '9'));
+        int off = cell ? (D - g.adv) / 2 : 0, adv = cell ? D : g.adv;
+        pens[k] = pen + off;
+        int r = pen + off + (g.w ? g.w + g.xoff : 1);
+        if (r > right)
+            right = r;
+        pen += adv;
+        if (pen > right)
+            right = pen;
+    }
+    *width = right;
+    return k;
+}
+
+void drawGlyph(const DFont *f, char ch, int pen, int base, uint8_t color)
+{
+    const DGlyph &g = glyphOf(f, ch);
+    const uint8_t *bits = f->bits + g.offset;
+    int top = base - g.yoff - g.h;
+    uint32_t i = 0;
+    for (int yy = 0; yy < g.h; yy++)
+        for (int xx = 0; xx < g.w; xx++, i++)
+            if (bits[i >> 3] & (0x80 >> (i & 7)))
+            {
+                int px = pen + g.xoff + xx, py = top + yy;
+                if (px >= 0 && py >= 0 && px < W && py < H)
+                    putInk(px, py, inkAt(color, px, py));
+            }
+}
+
+int clockLeft(const Element &el, int w)
+{
+    return el.x - (el.align == AL_CENTER ? w / 2 : el.align == AL_RIGHT ? w : 0);
+}
+
+void drawClock(const Element &el, const char *s)
+{
+    int pens[64], w;
+    int n = clockCells(el.font, s, pens, 64, &w), left = clockLeft(el, w);
+    for (int i = 0; i < n; i++)
+        drawGlyph(el.font, s[i], left + pens[i], el.y + el.font->ascent, el.color);
 }
 
 void drawElement(const Element &el, const struct tm &now)
@@ -544,6 +608,11 @@ void drawElement(const Element &el, const struct tm &now)
         return;
     case EL_CLOCK:
         clockText(buf, sizeof(buf), now);
+        if (!CLOCK_WORDS)
+        {
+            drawClock(el, buf);
+            return;
+        }
         break;
     case EL_DATE:
         fill(buf, sizeof(buf), el.text, dateToken, now);
@@ -927,15 +996,39 @@ uint32_t leadSec(int screen)
     return (leadMs[screen >= 0] + 999) / 1000;
 }
 
-// Clean pass for quick updates: fills the box around each clock (old and new
-// text) with one ink. Quick updates drive pixels only a few steps, so old digits
-// leave ghosts; flashing the clock box to the opposite ink, then to the
-// background, then drawing the new time gives every pixel there the same
-// history and clears them. Returns false if no clock text changed.
+// Clean pass for quick updates: fills the box of every clock character that
+// changed (old and new) with one ink; characters that stay the same at the same
+// spot, like AM/PM, are left alone. Quick updates drive pixels only a few
+// steps, so old digits leave ghosts; flashing the changed characters to the
+// opposite ink, then to the background, then drawing the new time gives every
+// pixel there the same history and clears them. Returns false if nothing changed.
+bool blankChanged(const DFont *f, const char *s, const int *pens, int n, const char *o, const int *opens, int on, int y,
+                  uint8_t ink)
+{
+    bool any = false;
+    for (int i = 0; i < n; i++)
+    {
+        if (s[i] == ' ')
+            continue;
+        bool same = false;
+        for (int j = 0; j < on && !same; j++)
+            same = o[j] == s[i] && opens[j] == pens[i];
+        if (same)
+            continue;
+        const DGlyph &g = glyphOf(f, s[i]);
+        int x0 = pens[i] + (g.xoff < 0 ? g.xoff : 0) - 3;
+        int x1 = pens[i] + (g.xoff + g.w > g.adv ? g.xoff + g.w : g.adv) + 3;
+        fillColor(x0, y - 4, x1 - x0, f->ascent + f->descent + 8, ink);
+        any = true;
+    }
+    return any;
+}
+
 bool blankClocks(const struct tm &before, const struct tm &after, uint8_t ink)
 {
     bool any = false;
     char a[64], b[64];
+    int pa[64], pb[64], wa, wb;
     clockText(a, sizeof(a), before);
     clockText(b, sizeof(b), after);
     if (!strcmp(a, b))
@@ -945,12 +1038,14 @@ bool blankClocks(const struct tm &before, const struct tm &after, uint8_t ink)
         const Element &el = ELEMENTS[i];
         if (el.type != EL_CLOCK)
             continue;
-        int wa = textWidth(el.font, a), wb = textWidth(el.font, b);
-        int la = el.x - (el.align == AL_CENTER ? wa / 2 : el.align == AL_RIGHT ? wa : 0);
-        int lb = el.x - (el.align == AL_CENTER ? wb / 2 : el.align == AL_RIGHT ? wb : 0);
-        int x0 = (la < lb ? la : lb) - 6, x1 = (la + wa > lb + wb ? la + wa : lb + wb) + 6;
-        fillColor(x0, el.y - 4, x1 - x0, el.font->ascent + el.font->descent + 8, ink);
-        any = true;
+        int na = clockCells(el.font, a, pa, 64, &wa), nb = clockCells(el.font, b, pb, 64, &wb);
+        int la = clockLeft(el, wa), lb = clockLeft(el, wb);
+        for (int k = 0; k < na; k++)
+            pa[k] += la;
+        for (int k = 0; k < nb; k++)
+            pb[k] += lb;
+        any |= blankChanged(el.font, a, pa, na, b, pb, nb, el.y, ink);
+        any |= blankChanged(el.font, b, pb, nb, a, pa, na, el.y, ink);
     }
     return any;
 }

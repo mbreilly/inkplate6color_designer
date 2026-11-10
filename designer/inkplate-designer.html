@@ -276,7 +276,7 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
             <label class="field"><span>Redraw the clock every</span><select id="t-update"><option value="1">1 minute</option><option value="2">2 minutes</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option></select></label>
           </div>
           <div class="fields" id="full-box" hidden><label class="field"><span>Full refresh after this many quick updates</span><input type="number" id="t-full" min="1" max="120"></label>
-            <label class="check"><input type="checkbox" id="t-clean"> Clean the clock area on each update: it blinks once, then shows the new time (much less ghosting, about a second longer)</label></div>
+            <label class="check"><input type="checkbox" id="t-clean"> Clean the clock on each update: the digits that changed blink once, then show the new time (much less ghosting, about a second longer)</label></div>
           <p class="note" id="update-note">The 6COLOR panel can only redraw the whole screen: each update is a full refresh of about 12–15 seconds with flashing, even when only the time changed. Redrawing less often means less flashing and longer battery life. The clock then changes on the hour and every N minutes after (with 5 minutes: 10:00, 10:05, 10:10…), and the device wakes early so each change shows up on time. Weather and schedule changes show at the next redraw.</p>
           </div>
         </div>
@@ -1870,7 +1870,7 @@ if (BOARD.bw) {
   set("#preview-note", "The preview uses the same bitmap fonts the Inkplate will, in black and white. Grays are drawn as fine dot patterns, exactly as the screen will, and photos are shown in the panel's 8 grays. Play rotation runs one minute per second.");
   set("#drop-note", "Each photo is resized to 800×600 and dithered to the panel's 8 grays. Dithering and boost apply to every photo and can be changed any time.");
   set("#overlay-note", "Photos use the panel's gray mode, which can only do full refreshes. With the clock on, each photo redraws (with a flash) every time the clock changes. Turn it off and each photo stays put until its time is up.");
-  set("#update-note", "The Inkplate 6 changes just the pixels that differ (a quick update, about half a second, no flashing), so the clock can tick every minute. Quick updates leave faint ghosts, worst with light text on a dark background, so the clock area blinks clean before each new time and every so often it does one full refresh (about a second, with a flash) to clean the screen. Black text on white ghosts the least. Weather and schedule changes show up right after they're fetched.");
+  set("#update-note", "The Inkplate 6 changes just the pixels that differ (a quick update, about half a second, no flashing), so the clock can tick every minute. Quick updates leave faint ghosts, worst with light text on a dark background, so the clock digits that change blink clean before each new time and every so often it does one full refresh (about a second, with a flash) to clean the screen. Black text on white ghosts the least. Weather and schedule changes show up right after they're fetched.");
   $("#full-box").hidden = false;
 }
 document.querySelectorAll(".sk").forEach((e) => { e.textContent = BOARD.sketch; });
@@ -1884,6 +1884,37 @@ function fillRect(buf, x, y, w, h, pat) {
     const rgb = INKS[pat[(yy & 7) * 8 + (xx & 7)]].rgb, i = (yy * W + xx) * 4;
     buf[i] = rgb[0]; buf[i + 1] = rgb[1]; buf[i + 2] = rgb[2]; buf[i + 3] = 255;
   }
+}
+// Inkplate 6 clock: each digit (and a space padding a one-digit hour) gets the
+// widest digit's advance, centered in its cell, so the colon and AM/PM never move
+// and a quick update only touches digits that change. Same as the firmware.
+function clockCells(r, text) {
+  let D = 0;
+  for (const c of "0123456789") D = Math.max(D, glyphOf(r, c).adv);
+  const chars = [...text], cells = [];
+  let pen = 0, right = 0;
+  chars.forEach((ch, i) => {
+    const g = glyphOf(r, ch), isCell = /[0-9]/.test(ch) || (ch === " " && /[0-9]/.test(chars[i + 1] || ""));
+    const off = isCell ? Math.floor((D - g.adv) / 2) : 0, adv = isCell ? D : g.adv;
+    cells.push({ ch, pen: pen + off });
+    right = Math.max(right, pen + off + (g.bits ? g.w + g.xoff : 1), pen + adv);
+    pen += adv;
+  });
+  return { cells, w: right };
+}
+function drawClockText(buf, font, text, x, y, align, pat) {
+  ensureFont(font);
+  const r = raster(font), { cells, w } = clockCells(r, text), left = x - (align === "center" ? Math.floor(w / 2) : align === "right" ? w : 0), base = y + r.ascent;
+  for (const c of cells) {
+    const g = glyphOf(r, c.ch);
+    if (g.bits) for (let yy = 0; yy < g.h; yy++) for (let xx = 0; xx < g.w; xx++) {
+      if (!g.bits[yy * g.w + xx]) continue;
+      const px = left + c.pen + g.xoff + xx, py = base - g.yoff - g.h + yy;
+      if (px < 0 || py < 0 || px >= W || py >= H) continue;
+      const rgb = INKS[pat[(py & 7) * 8 + (px & 7)]].rgb, i = (py * W + px) * 4; buf[i] = rgb[0]; buf[i + 1] = rgb[1]; buf[i + 2] = rgb[2];
+    }
+  }
+  return { x: left, y, w: Math.max(w, 4), h: r.ascent + r.descent };
 }
 function drawText(buf, font, text, x, y, align, pat) {
   ensureFont(font);
@@ -2015,6 +2046,11 @@ function drawElement(buf, el, now) {
       drawText(buf, el.font, fitText(r, e.what, el.width - tw), el.x + tw, y, "left", xc);
     });
     return { x: el.x, y: el.y, w: el.width, h: Math.max(bh, 6) };
+  }
+  if (BOARD.bw && el.type === "clock" && S.time.style !== "words") {
+    let t = elText(el, now);
+    if (!S.time.hour24 && /^\d:/.test(t)) t = " " + t; // one-digit hour: keep its cell
+    return drawClockText(buf, el.font, t, el.x, el.y, el.align, patternOf(el.color));
   }
   return drawText(buf, el.font, elText(el, now), el.x, el.y, el.align, patternOf(el.color));
 }
