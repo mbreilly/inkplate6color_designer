@@ -928,10 +928,11 @@ uint32_t leadSec(int screen)
 }
 
 // Clean pass for quick updates: fills the box around each clock (old and new
-// text) with the background ink. Showing that first, then the new time, drives
-// every clock pixel twice and leaves far less ghosting. Returns false if no
-// clock text changed.
-bool blankClocks(const struct tm &before, const struct tm &after)
+// text) with one ink. Quick updates drive pixels only a few steps, so old digits
+// leave ghosts; flashing the clock box to the opposite ink, then to the
+// background, then drawing the new time gives every pixel there the same
+// history and clears them. Returns false if no clock text changed.
+bool blankClocks(const struct tm &before, const struct tm &after, uint8_t ink)
 {
     bool any = false;
     char a[64], b[64];
@@ -948,7 +949,7 @@ bool blankClocks(const struct tm &before, const struct tm &after)
         int la = el.x - (el.align == AL_CENTER ? wa / 2 : el.align == AL_RIGHT ? wa : 0);
         int lb = el.x - (el.align == AL_CENTER ? wb / 2 : el.align == AL_RIGHT ? wb : 0);
         int x0 = (la < lb ? la : lb) - 6, x1 = (la + wa > lb + wb ? la + wa : lb + wb) + 6;
-        fillColor(x0, el.y - 4, x1 - x0, el.font->ascent + el.font->descent + 8, BG_INK);
+        fillColor(x0, el.y - 4, x1 - x0, el.font->ascent + el.font->descent + 8, ink);
         any = true;
     }
     return any;
@@ -1032,9 +1033,15 @@ void setup()
     int shown = drawScreen(screen, local);
     if (quick && shown < 0)
     {
-        if (CLEAN_CLOCK && blankClocks(localTm(shownMinute), local))
+        // The buffer holds the new screen; first show it with the clock boxes
+        // in the opposite ink, then in the background ink, then the new time.
+        uint8_t opposite = BG_INK == INK_BLACK ? INK_WHITE : INK_BLACK;
+        if (CLEAN_CLOCK && blankClocks(localTm(shownMinute), local, opposite))
         {
-            display.partialUpdate(true); // everything new, with the clocks blanked
+            display.partialUpdate(true);
+            drawMain(local);
+            blankClocks(localTm(shownMinute), local, BG_INK);
+            display.partialUpdate(true);
             drawMain(local);
         }
         display.partialUpdate(true);
