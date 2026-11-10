@@ -1,0 +1,3065 @@
+<title>Inkplate 6 Designer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Orbitron:wght@400;700&family=Share+Tech+Mono&family=VT323&family=Press+Start+2P&family=Oswald:wght@400;700&family=Lora:wght@400;700&family=Nunito:wght@400;700&family=Bebas+Neue&family=Roboto+Condensed:wght@400;700&display=swap">
+<style>
+/* Layout: a workbench. The panel sits pinned on the left like a part on a mat; the editor panels stack on the right. */
+:root {
+  --bg: #ebece6;
+  --panel: #f9f9f5;
+  --line: #d2d4ca;
+  --ink: #1d211c;
+  --muted: #5e6458;
+  --accent: #2c3a80;
+  --accent-ink: #ffffff;
+  --accent-soft: #e0e4f3;
+  --bezel: #23262a;
+  --bezel-edge: #3a3f45;
+  --danger: #a8302a;
+  --ok: #2d6e40;
+  --f-display: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15171a; --panel: #1d2024; --line: #30353b; --ink: #e7e9e3; --muted: #9aa198;
+    --accent: #9aabf0; --accent-ink: #11152a; --accent-soft: #252c4a;
+    --bezel: #0b0c0e; --bezel-edge: #353a41; --danger: #ff8f84; --ok: #7fd49a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15171a; --panel: #1d2024; --line: #30353b; --ink: #e7e9e3; --muted: #9aa198;
+  --accent: #9aabf0; --accent-ink: #11152a; --accent-soft: #252c4a;
+  --bezel: #0b0c0e; --bezel-edge: #353a41; --danger: #ff8f84; --ok: #7fd49a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { background: var(--bg); color: var(--ink); }
+body { font-family: var(--f-body); font-size: 14px; line-height: 1.45; }
+.wrap { max-width: 1320px; margin: 0 auto; padding-block: 18px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; margin-bottom: 16px; }
+header.top h1 { font-family: var(--f-display); font-weight: 600; font-size: 24px; letter-spacing: .01em; margin: 0; text-wrap: balance; }
+header.top p { margin: 0; color: var(--muted); }
+.grid { display: grid; grid-template-columns: minmax(0, 760px) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 1120px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.left { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); display: grid; gap: 12px; min-width: 0; }
+@media (max-width: 1120px) { .left { position: static; } }
+
+/* device */
+.device { background: var(--bezel); border: 1px solid var(--bezel-edge); border-radius: 14px; padding: 22px 22px 18px; box-shadow: 0 10px 30px rgb(0 0 0 / .18); }
+.screen { position: relative; width: 100%; max-width: 720px; aspect-ratio: 600 / 448; margin: 0 auto; background: #ecebe3; touch-action: none; outline: none; }
+.screen:focus-visible { box-shadow: 0 0 0 3px var(--accent); }
+.screen canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated; image-rendering: crisp-edges; cursor: default; }
+.sel { position: absolute; border: 1px dashed #e2c83c; box-shadow: 0 0 0 1px rgb(0 0 0 / .6); pointer-events: none; }
+.sel span { position: absolute; left: -1px; bottom: 100%; background: #e2c83c; color: #111; font: 500 11px/1.5 var(--f-mono); padding: 0 5px; white-space: nowrap; }
+.device-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; color: #9aa0a6; font: 12px var(--f-mono); gap: 10px; flex-wrap: wrap; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); }
+.seg button { border: 0; background: transparent; color: var(--ink); padding: 7px 12px; font: 500 13px var(--f-body); cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.status { font: 12px var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--accent); }
+
+/* panels */
+.right { min-width: 0; }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+.tabs button { border: 0; background: none; padding: 9px 12px; font: 600 13px var(--f-display); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+section.panel { display: grid; gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 12px; min-width: 0; }
+.card h2 { margin: 0; font: 600 13px var(--f-display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.card p.note { margin: 0; color: var(--muted); font-size: 13px; }
+.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 12px; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field.wide { grid-column: 1 / -1; }
+.field > span { font-size: 12px; color: var(--muted); }
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+input[type=text], input[type=number], input[type=password], input[type=time], input[type=url], select, textarea {
+  width: 100%; min-width: 0; font: 14px var(--f-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+input[type=number] { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+textarea { font: 13px/1.5 var(--f-mono); resize: vertical; }
+input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 7px; padding: 7px 12px; font: 500 13px var(--f-body); cursor: pointer; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.small { padding: 4px 8px; font-size: 12px; }
+.btn.danger { color: var(--danger); }
+.btn[disabled] { opacity: .5; cursor: default; }
+.inks { display: flex; flex-wrap: wrap; gap: 5px; }
+.inks button { width: 26px; height: 26px; border-radius: 50%; border: 1px solid rgb(0 0 0 / .35); cursor: pointer; padding: 0; box-shadow: inset 0 0 0 2px rgb(255 255 255 / .0); }
+.inks button[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: 2px; }
+.picker { display: grid; gap: 6px; }
+.inks.mixes button { border-radius: 6px; }
+.list { display: grid; gap: 6px; }
+.el-row { display: grid; grid-template-columns: auto auto 1fr auto; align-items: center; gap: 10px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); cursor: pointer; }
+.el-row[aria-current="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgb(0 0 0 / .3); }
+.chip { font: 500 11px var(--f-mono); color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: 1px 7px; }
+.sched-entry { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.sched-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.sched-row select { width: auto; }
+.sched-row input[type=time] { width: 132px; }
+.sched-row .what { flex: 1 1 160px; min-width: 0; }
+.sched-row .to { color: var(--muted); font-size: 13px; }
+.days { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.days button { min-width: 38px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: 6px; padding: 4px 6px; font: 500 12px var(--f-mono); cursor: pointer; }
+.days button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.days .quick { margin-left: 6px; display: flex; gap: 4px; }
+.thumbs { display: grid; gap: 8px; }
+.thumb { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 10px; align-items: center; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.thumb[aria-current="true"] { border-color: var(--accent); }
+.thumb canvas { width: 112px; height: 84px; image-rendering: pixelated; border-radius: 3px; cursor: pointer; display: block; background: var(--line); }
+.thumb .meta { display: grid; gap: 6px; min-width: 0; }
+.thumb .meta b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thumb .acts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.thumb .acts input { width: 72px; }
+.tokens { font: 12px var(--f-mono); color: var(--muted); }
+.tokens code { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+.files { font: 12px/1.7 var(--f-mono); color: var(--muted); margin: 0; padding: 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; overflow-x: auto; font-variant-numeric: tabular-nums; }
+.meter { display: grid; gap: 4px; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); background: var(--ink); color: var(--bg); padding: 9px 14px; border-radius: 8px; font-size: 13px; z-index: 20; max-width: calc(100% - 32px); }
+.drop { border: 1px dashed var(--line); border-radius: 8px; padding: 14px; text-align: center; color: var(--muted); }
+.drop.over { border-color: var(--accent); color: var(--accent); }
+@media (max-width: 520px) { .device { padding: 12px; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1 id="app-title">Inkplate 6COLOR Designer</h1>
+    <p id="app-sub">Arrange the 600×448 seven-ink screen, then export an Arduino sketch and a microSD folder.</p>
+  </header>
+
+  <div class="grid">
+    <div class="left">
+      <div class="toolbar">
+        <div class="seg" role="group" aria-label="Preview">
+          <button id="view-main" aria-pressed="true">Main screen</button>
+          <button id="view-gallery" aria-pressed="false">Gallery</button>
+        </div>
+        <button class="btn" id="play">▶ Play rotation</button>
+        <span class="status" id="coords"></span>
+      </div>
+      <div class="device">
+        <div class="screen" id="screen" tabindex="0" aria-label="Inkplate screen preview. Drag items to move them; arrow keys nudge the selected item.">
+          <canvas id="stage" width="600" height="448"></canvas>
+          <div class="sel" id="sel" hidden><span id="sel-label"></span></div>
+        </div>
+        <div class="device-foot">
+          <span id="mode-label">Main screen</span>
+          <span id="screen-size">600 × 448 · 7 inks</span>
+        </div>
+      </div>
+      <div class="bar" aria-hidden="true"><i id="progress"></i></div>
+      <p class="status" id="preview-note" style="margin:0">The preview uses the same bitmap fonts and the same seven inks the Inkplate will. Photos are dithered to those inks, and the square mixed-color swatches are drawn as fine patterns of them, exactly as the screen will. Play rotation runs one minute per second and shows the full-screen refresh flash at each change.</p>
+    </div>
+
+    <div class="right">
+      <nav class="tabs" role="tablist">
+        <button role="tab" data-tab="layout" aria-selected="true">Layout</button>
+        <button role="tab" data-tab="schedule" aria-selected="false">Schedule</button>
+        <button role="tab" data-tab="gallery" aria-selected="false">Gallery</button>
+        <button role="tab" data-tab="weather" aria-selected="false">Clock &amp; weather</button>
+        <button role="tab" data-tab="export" aria-selected="false">Export</button>
+      </nav>
+
+      <section class="panel" data-panel="layout">
+        <div class="card">
+          <h2>Background</h2>
+          <div class="fields">
+            <div class="field wide"><span>Ink</span><div id="bg-ink"></div></div>
+            <div class="field wide"><span>Image (optional, fills the screen behind everything; stored on the microSD card)</span>
+              <div class="toolbar"><label class="btn small">Choose image<input type="file" id="bg-file" accept="image/*" hidden></label>
+              <button class="btn small danger" id="bg-clear">Remove image</button><span class="status" id="bg-name"></span></div></div>
+          </div>
+        </div>
+        <div class="card">
+          <h2>On screen <button class="btn small" id="add-text">+ Text label</button></h2>
+          <div class="list" id="el-list"></div>
+        </div>
+        <div class="card" id="props-card">
+          <h2 id="props-title">Selected item</h2>
+          <div id="props"></div>
+        </div>
+      </section>
+
+      <section class="panel" data-panel="schedule" hidden>
+        <div class="card">
+          <h2>Where the schedule comes from</h2>
+          <div class="seg" role="group" aria-label="Where the schedule comes from">
+            <button type="button" id="src-manual" aria-pressed="true">Type it in here</button>
+            <button type="button" id="src-url" aria-pressed="false">Read it from a web address</button>
+          </div>
+          <div id="src-url-fields" hidden style="display:grid;gap:12px">
+            <p class="note">The Inkplate reads a plain-text file from this address and shows one line on the screen for each line of text. Change the file and the screen follows at the next check, with no new export.</p>
+            <div class="fields">
+              <label class="field wide"><span>Web address of the text file</span><input type="url" id="s-url" placeholder="https://raw.githubusercontent.com/you/repo/main/schedule.txt" spellcheck="false" autocomplete="off"></label>
+              <label class="field"><span>Check for changes every (minutes)</span><input type="number" id="s-refresh" min="1" max="1440"></label>
+            </div>
+            <p class="note">Split a line into the same columns as typed entries with <code>|</code> or a tab, e.g. <code>MTWT | 6:40am | In DRL until 1:40pm</code>. A line with two parts puts the first under the days and times; a line with no <code>|</code> runs across the whole width. Start a line with <code>!</code> to show it in the happening-now ink, or <code>#</code> to leave it out.</p>
+            <label class="field"><span>Preview text: what the address returns</span><textarea id="s-preview" rows="7" spellcheck="false"></textarea></label>
+            <div class="toolbar"><button type="button" class="btn small" id="s-fetch">Load the preview from the address</button><span class="status" id="s-fetch-status"></span></div>
+            <p class="note">Until its first read the Inkplate shows “Loading schedule...”. If a later read fails it keeps the last schedule it got, even through a power cut. It reads up to 4 KB. Checks happen after a screen refresh, so a change shows up at the following minute.</p>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Schedule inks</h2>
+          <div id="sched-colors"></div>
+        </div>
+        <div class="card" id="sched-entries-card">
+          <h2>Schedule entries <span class="toolbar"><button class="btn small" id="sched-sort">Sort by time</button><button class="btn small" id="sched-add">+ Entry</button></span></h2>
+          <p class="note">Each entry is one line on the screen, in this order: its days, its time, then what it is, for example “MTWT 6:40am In DRL until 1:40pm” or “F All day Work from home”. Entries that span a window or last all day light up while they're happening. Use ↑ ↓ to set the order.</p>
+          <label class="field" style="max-width:260px"><span>Preview the screen as if it's</span><select id="preview-day"></select></label>
+          <div class="list" id="sched-list"></div>
+        </div>
+      </section>
+
+      <section class="panel" data-panel="gallery" hidden>
+        <div class="card">
+          <h2>Slideshow</h2>
+          <label class="check"><input type="checkbox" id="g-enabled"> Turn on the photo slideshow</label>
+          <div class="fields">
+            <label class="field"><span>Show the schedule screen for (minutes)</span><input type="number" id="t-main" min="1" max="1440"></label>
+            <label class="field"><span>Then show each photo for (minutes)</span><input type="number" id="g-default" min="1" max="1440"></label>
+          </div>
+          <p class="note" id="cycle-note"></p>
+        </div>
+        <div class="card">
+          <h2>Photos</h2>
+          <div class="fields">
+            <label class="field"><span>When the shape doesn't match</span><select id="g-fit"><option value="cover">Crop to fill</option><option value="contain">Fit inside, pad edges</option></select></label>
+            <label class="field"><span>Dithering</span><select id="g-dither"><option value="fs">Floyd–Steinberg (smooth)</option><option value="atkinson">Atkinson (crisp)</option><option value="none">None (posterized)</option></select></label>
+            <label class="field"><span>Color boost</span><select id="g-boost"><option value="1">Off</option><option value="1.25">Some</option><option value="1.5">More</option><option value="1.8">Lots</option></select></label>
+            <div class="field wide"><span>Padding ink (for “Fit inside”)</span><div id="g-fill"></div></div>
+          </div>
+          <div class="drop" id="drop">Drop photos here or <label class="btn small">choose files<input type="file" id="g-files" accept="image/*" multiple hidden></label><br><span class="status" id="drop-note">Each photo is resized to 600×448 and dithered to the seven inks. Dithering and boost apply to every photo and can be changed any time.</span></div>
+          <div class="thumbs" id="thumbs"></div>
+        </div>
+        <div class="card">
+          <h2>Clock over photos</h2>
+          <p class="note" id="overlay-note">With the clock on, photos redraw every minute so the time stays right, which means a refresh flash each minute. Turn it off and each photo stays put, untouched, until its time is up.</p>
+          <div id="overlay-props"></div>
+        </div>
+      </section>
+
+      <section class="panel" data-panel="weather" hidden>
+        <div class="card">
+          <h2>Weather updates</h2>
+          <div class="fields">
+            <label class="field"><span>Refresh weather every (minutes)</span><input type="number" id="t-weather" min="5" max="240"></label>
+          </div>
+          <p class="note">How long the schedule screen and each photo stay up is set in the Gallery tab.</p>
+        </div>
+        <div class="card">
+          <h2>Time format</h2>
+          <div class="fields">
+            <label class="field"><span>The clock shows</span><select id="t-style"><option value="time">The time (10:05 AM)</option><option value="words">Time of day in words</option></select></label>
+          </div>
+          <div id="words-box">
+            <p class="note">Each name shows from its start time until the next one starts. The screen only redraws when the name changes, at midnight for the date, when a schedule entry starts or ends, and when the weather or schedule is fetched, so it flashes far less often. Raising "Refresh weather every" above cuts the flashing further.</p>
+            <div id="parts-list" class="list"></div>
+            <div class="toolbar"><button class="btn small" id="add-part">+ Add a time of day</button></div>
+          </div>
+          <div id="time-box">
+          <div class="fields">
+            <label class="check"><input type="checkbox" id="h24"> 24-hour time</label>
+            <label class="check"><input type="checkbox" id="ampm"> Show AM / PM</label>
+          </div>
+          <div class="fields">
+            <label class="field"><span>Redraw the clock every</span><select id="t-update"><option value="1">1 minute</option><option value="2">2 minutes</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option></select></label>
+          </div>
+          <div class="fields" id="full-box" hidden><label class="field"><span>Full refresh after this many quick updates</span><input type="number" id="t-full" min="1" max="120"></label></div>
+          <p class="note" id="update-note">The 6COLOR panel can only redraw the whole screen: each update is a full refresh of about 12–15 seconds with flashing, even when only the time changed. Redrawing less often means less flashing and longer battery life. The clock then changes on the hour and every N minutes after (with 5 minutes: 10:00, 10:05, 10:10…), and the device wakes early so each change shows up on time. Weather and schedule changes show at the next redraw.</p>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Weather inks</h2>
+          <div id="weather-colors"></div>
+        </div>
+        <div class="card">
+          <h2>Weather location</h2>
+          <div class="fields">
+            <label class="field"><span>Zip / postal code</span><input type="text" id="w-zip" inputmode="numeric" autocomplete="postal-code"></label>
+            <label class="field"><span>Country code</span><input type="text" id="w-country" maxlength="2"></label>
+            <label class="field"><span>Units</span><select id="w-units"><option value="imperial">°F, mph</option><option value="metric">°C, m/s</option></select></label>
+            <label class="field"><span>UTC offset until the first weather fetch (hours)</span><input type="number" id="w-offset" min="-12" max="14" step="0.5"></label>
+          </div>
+          <p class="note">Weather comes from OpenWeatherMap's free Current Weather API. The clock is set from internet time (NTP) and the time zone comes from the weather reply for your zip code, daylight saving included.</p>
+        </div>
+        <div class="card">
+          <h2>Preview values</h2>
+          <p class="note">Sample readings used only in this preview.</p>
+          <div class="fields">
+            <label class="field"><span>Temperature</span><input type="number" id="s-temp"></label>
+            <label class="field"><span>Conditions</span><input type="text" id="s-desc"></label>
+            <label class="field"><span>Humidity %</span><input type="number" id="s-hum"></label>
+            <label class="field"><span>City</span><input type="text" id="s-city"></label>
+            <label class="field"><span>Battery volts</span><input type="number" id="s-volts" step="0.01"></label>
+            <label class="check"><input type="checkbox" id="s-wifi"> WiFi connected</label>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" data-panel="export" hidden>
+        <div class="card">
+          <h2>Device settings</h2>
+          <p class="note">Optional. These go only into <code>secrets.h</code> inside the zip and are never saved with the project. Leave them blank to fill in later.</p>
+          <div class="fields">
+            <label class="field"><span>WiFi network</span><input type="text" id="x-ssid" autocomplete="off"></label>
+            <label class="field"><span>WiFi password</span><input type="password" id="x-pass" autocomplete="off"></label>
+            <label class="field wide"><span>OpenWeatherMap API key (free at openweathermap.org/api)</span><input type="text" id="x-key" autocomplete="off"></label>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Export for Arduino + microSD</h2>
+          <div class="meter"><span class="status" id="flash-label"></span><div class="bar"><i id="flash-bar"></i></div></div>
+          <pre class="files" id="file-list"></pre>
+          <div class="toolbar"><button class="btn primary" id="export">Export .zip</button><span class="status" id="export-status"></span></div>
+          <p class="note">Open <code><span class="sk">InkplateDisplay</span>/<span class="sk">InkplateDisplay</span>.ino</code> in the Arduino IDE and upload it. Copy the contents of <code>sdcard/</code> to a FAT32 microSD card. README.txt in the zip has the steps.</p>
+        </div>
+        <div class="card">
+          <h2>Project</h2>
+          <p class="note">Your design is kept in this browser automatically. Save a project file to move it to another computer or keep a backup. To bring over a PyPortal design, use Save project in the PyPortal Display Designer, then Import PyPortal project here: layout, weekly schedule, photos and timing come across, scaled to this screen, with each color matched to the nearest ink.</p>
+          <div class="toolbar">
+            <button class="btn" id="save-proj">Save project</button>
+            <label class="btn">Open project<input type="file" id="open-proj" accept=".json,application/json" hidden></label>
+            <label class="btn">Import PyPortal project<input type="file" id="import-pp" accept=".json,application/json" hidden></label>
+            <button class="btn danger" id="reset">Start over</button>
+            <span class="status" id="reset-confirm" hidden>Replace everything with the example? <button class="btn small danger" id="reset-yes">Yes, start over</button> <button class="btn small" id="reset-no">Cancel</button></span>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script type="text/plain" id="fw-ino">
+// Inkplate 6 display (black and white, 800x600): clock, weather, schedule and
+// photo gallery. Made by Inkplate 6 Designer. Layout, fonts and timing live in
+// layout.h and fonts.h; WiFi and the weather key live in secrets.h. Photos are
+// read from the microSD card (copy the sdcard/ folder onto it).
+//
+// The main screen uses the panel's black-and-white mode, so most changes are
+// quick partial updates: only the pixels that differ change, with no flashing.
+// The board deep-sleeps between updates, which wipes the library's copy of what
+// is on the panel, so on each wake the sketch redraws the previous screen from
+// what it kept in RTC memory (shownMinute and the weather etc.), hands that to
+// the library with preloadScreen(), then draws the new screen. Every
+// FULL_REFRESH_EVERY quick updates it does a full refresh to clear ghosting.
+// Photos use the 8-gray mode, which only does full refreshes.
+// The onboard RTC keeps UTC and wakes the board via GPIO39.
+//
+// Board: Tools -> Board -> Inkplate Boards -> "Soldered Inkplate6"
+// Libraries: InkplateLibrary (Soldered), ArduinoJson 7.x
+
+#if !defined(ARDUINO_INKPLATE6V2) && !defined(ARDUINO_INKPLATE6)
+#error "Select Soldered Inkplate6 in Tools -> Board."
+#endif
+
+// Ink numbers used in layout.h (PATTERNS holds these).
+#define INK_BLACK 0
+#define INK_WHITE 1
+
+#include "Inkplate.h"
+#include <ArduinoJson.h>
+#include <HTTPClient.h>
+#include <Preferences.h>
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+
+#include "display_types.h"
+#include "fonts.h"
+#include "layout.h"
+#include "secrets.h"
+
+Inkplate display(INKPLATE_1BIT);
+
+static const int W = E_INK_WIDTH;  // 800
+static const int H = E_INK_HEIGHT; // 600
+static const char *WEEKDAYS[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+static const char *MONTHS[] = {"January", "February", "March",     "April",   "May",      "June",
+                               "July",    "August",   "September", "October", "November", "December"};
+
+// ---------------------------------------------------------------- state kept through deep sleep
+// RTC memory survives deep sleep but is reset on power-up or the reset button.
+
+struct Weather
+{
+    int temp, feels, hi, lo, humidity, wind;
+    char desc[48], main[24], city[32];
+};
+
+RTC_DATA_ATTR int32_t tzOffset = UTC_OFFSET_FALLBACK_SECONDS;
+RTC_DATA_ATTR uint32_t nextFetchUtc = 0;
+RTC_DATA_ATTR uint32_t lastWeatherUtc = 0; // 0 = never fetched
+RTC_DATA_ATTR Weather wx;
+RTC_DATA_ATTR uint32_t leadMs[2] = {3000, 8000};   // wake -> update done, for [main screen, photo]
+RTC_DATA_ATTR uint32_t nextScheduleUtc = 0;        // next read of SCHEDULE_URL
+RTC_DATA_ATTR bool scheduleError = false;          // the last read of SCHEDULE_URL failed
+RTC_DATA_ATTR bool wifiOk = false;                 // the last WiFi connection worked (for the WiFi icon)
+// What is on the panel now, so the next wake can redraw it for a partial update.
+RTC_DATA_ATTR int8_t shownScreen = -2;     // -1 main screen, 0+ photo, -2 unknown
+RTC_DATA_ATTR uint32_t shownMinute = 0;    // local minute (since 1970) it was drawn for
+RTC_DATA_ATTR float shownVolts = 0;        // battery reading it shows
+RTC_DATA_ATTR uint16_t quickUpdates = 0;   // partial updates since the last full refresh
+
+// Schedule read from SCHEDULE_URL, already cleaned to printable ASCII (cleanScheduleText).
+// The last good copy is kept in flash (loadSchedule / fetchSchedule), so it survives
+// deep sleep and power cuts and a failed read keeps showing it.
+static const size_t SCHEDULE_MAX_BYTES = 4096;
+char scheduleText[SCHEDULE_MAX_BYTES + 1];
+bool haveSchedule = false;
+
+// ---------------------------------------------------------------- text
+
+// Colors are numbers into PATTERNS (layout.h): an 8x8 tile of inks, repeated
+// from the screen's top-left. 0-6 are the solid inks, mixed colors follow.
+inline uint8_t inkAt(uint8_t color, int x, int y)
+{
+    return PATTERNS[color][(y & 7) * 8 + (x & 7)];
+}
+
+// Sets one pixel to an ink, in whichever mode the display is in
+// (black and white: BLACK / WHITE; 8 grays: 0 = black, 7 = white).
+inline void putInk(int x, int y, uint8_t ink)
+{
+    if (display.getDisplayMode() == INKPLATE_3BIT)
+        display.drawPixel(x, y, ink == INK_BLACK ? 0 : 7);
+    else
+        display.drawPixel(x, y, ink == INK_BLACK ? BLACK : WHITE);
+}
+
+void fillColor(int x, int y, int w, int h, uint8_t color)
+{
+    int x0 = x < 0 ? 0 : x, y0 = y < 0 ? 0 : y, x1 = x + w > W ? W : x + w, y1 = y + h > H ? H : y + h;
+    for (int yy = y0; yy < y1; yy++)
+        for (int xx = x0; xx < x1; xx++)
+            putInk(xx, yy, inkAt(color, xx, yy));
+}
+
+const DGlyph &glyphOf(const DFont *f, char ch)
+{
+    uint8_t c = (uint8_t)ch;
+    if (c < 32 || c > 127)
+        c = '?';
+    return f->glyphs[c - 32];
+}
+
+// Same widths the designer uses, so alignment matches the preview.
+int textWidth(const DFont *f, const char *s)
+{
+    int pen = 0, right = 0;
+    for (; *s; s++)
+    {
+        const DGlyph &g = glyphOf(f, *s);
+        int r = pen + (g.w ? g.w + g.xoff : 1);
+        if (r > right)
+            right = r;
+        pen += g.adv;
+        if (pen > right)
+            right = pen;
+    }
+    return right;
+}
+
+int advanceWidth(const DFont *f, const char *s)
+{
+    int w = 0;
+    for (; *s; s++)
+        w += glyphOf(f, *s).adv;
+    return w;
+}
+
+// x, y: anchor point and top of the ascent, as in the designer.
+void drawText(const DFont *f, const char *s, int x, int y, uint8_t align, uint8_t color)
+{
+    int w = textWidth(f, s);
+    int pen = x - (align == AL_CENTER ? w / 2 : align == AL_RIGHT ? w : 0);
+    int base = y + f->ascent;
+    for (; *s; s++)
+    {
+        const DGlyph &g = glyphOf(f, *s);
+        const uint8_t *bits = f->bits + g.offset;
+        int top = base - g.yoff - g.h;
+        uint32_t i = 0;
+        for (int yy = 0; yy < g.h; yy++)
+            for (int xx = 0; xx < g.w; xx++, i++)
+                if (bits[i >> 3] & (0x80 >> (i & 7)))
+                {
+                    int px = pen + g.xoff + xx, py = top + yy;
+                    if (px >= 0 && py >= 0 && px < W && py < H)
+                        putInk(px, py, inkAt(color, px, py));
+                }
+        pen += g.adv;
+    }
+}
+
+// Shorten with "..." until it fits, exactly like the designer's preview.
+void fitText(const DFont *f, char *text, size_t n, int maxWidth)
+{
+    if (maxWidth <= 0 || advanceWidth(f, text) <= maxWidth)
+        return;
+    char buf[128];
+    int len = strlen(text);
+    snprintf(buf, sizeof(buf), "%.*s...", len, text);
+    while (len > 0 && advanceWidth(f, buf) > maxWidth)
+    {
+        len--;
+        snprintf(buf, sizeof(buf), "%.*s...", len, text);
+    }
+    while (len > 0 && text[len - 1] == ' ')
+        len--;
+    text[len] = 0;
+    strncat(text, "...", n - len - 1);
+}
+
+void fmtTime(char *out, size_t n, int hour, int minute, bool ampm)
+{
+    if (HOUR24)
+        snprintf(out, n, "%02d:%02d", hour, minute);
+    else
+        snprintf(out, n, "%d:%02d%s", (hour % 12) ? hour % 12 : 12, minute, ampm ? (hour < 12 ? " AM" : " PM") : "");
+}
+
+// Replaces {token} in fmt using lookup(); unknown tokens are left as they are.
+void fill(char *out, size_t n, const char *fmt, Lookup lookup, const struct tm &now)
+{
+    size_t o = 0;
+    while (*fmt && o + 1 < n)
+    {
+        const char *close = *fmt == '{' ? strchr(fmt, '}') : nullptr;
+        if (close && close - fmt < 20)
+        {
+            char name[20], val[64];
+            snprintf(name, sizeof(name), "%.*s", (int)(close - fmt - 1), fmt + 1);
+            if (lookup(name, val, sizeof(val), now))
+            {
+                for (const char *v = val; *v && o + 1 < n; v++)
+                    out[o++] = *v;
+                fmt = close + 1;
+                continue;
+            }
+        }
+        out[o++] = *fmt++;
+    }
+    out[o] = 0;
+}
+
+bool dateToken(const char *k, char *v, size_t n, const struct tm &t)
+{
+    if (!strcmp(k, "weekday"))
+        snprintf(v, n, "%s", WEEKDAYS[t.tm_wday]);
+    else if (!strcmp(k, "wkd"))
+        snprintf(v, n, "%.3s", WEEKDAYS[t.tm_wday]);
+    else if (!strcmp(k, "month"))
+        snprintf(v, n, "%s", MONTHS[t.tm_mon]);
+    else if (!strcmp(k, "mon"))
+        snprintf(v, n, "%.3s", MONTHS[t.tm_mon]);
+    else if (!strcmp(k, "day"))
+        snprintf(v, n, "%d", t.tm_mday);
+    else if (!strcmp(k, "dd"))
+        snprintf(v, n, "%02d", t.tm_mday);
+    else if (!strcmp(k, "mm"))
+        snprintf(v, n, "%02d", t.tm_mon + 1);
+    else if (!strcmp(k, "year"))
+        snprintf(v, n, "%d", t.tm_year + 1900);
+    else
+        return false;
+    return true;
+}
+
+bool weatherToken(const char *k, char *v, size_t n, const struct tm &)
+{
+    bool have = lastWeatherUtc != 0;
+    const char *imperial = strcmp(WEATHER_UNITS, "imperial") == 0 ? "\177F" : "\177C";
+    if (!strcmp(k, "unit"))
+        snprintf(v, n, "%s", imperial);
+    else if (!strcmp(k, "temp"))
+        have ? snprintf(v, n, "%d", wx.temp) : snprintf(v, n, "--");
+    else if (!strcmp(k, "feels"))
+        have ? snprintf(v, n, "%d", wx.feels) : snprintf(v, n, "--");
+    else if (!strcmp(k, "hi"))
+        have ? snprintf(v, n, "%d", wx.hi) : snprintf(v, n, "--");
+    else if (!strcmp(k, "lo"))
+        have ? snprintf(v, n, "%d", wx.lo) : snprintf(v, n, "--");
+    else if (!strcmp(k, "humidity"))
+        have ? snprintf(v, n, "%d", wx.humidity) : snprintf(v, n, "--");
+    else if (!strcmp(k, "wind"))
+        have ? snprintf(v, n, "%d", wx.wind) : snprintf(v, n, "--");
+    else if (!strcmp(k, "desc"))
+        snprintf(v, n, "%s", wx.desc);
+    else if (!strcmp(k, "main"))
+        snprintf(v, n, "%s", wx.main);
+    else if (!strcmp(k, "city"))
+        snprintf(v, n, "%s", wx.city);
+    else
+        return false;
+    return true;
+}
+
+bool updatedToken(const char *k, char *v, size_t n, const struct tm &)
+{
+    if (strcmp(k, "time"))
+        return false;
+    time_t t = (time_t)lastWeatherUtc + tzOffset;
+    struct tm u;
+    gmtime_r(&t, &u);
+    fmtTime(v, n, u.tm_hour, u.tm_min, true);
+    return true;
+}
+
+bool batteryToken(const char *k, char *v, size_t n, const struct tm &)
+{
+    if (strcmp(k, "volts"))
+        return false;
+    snprintf(v, n, "%.2f", shownVolts);
+    return true;
+}
+
+// ---------------------------------------------------------------- screens
+
+// Weekly schedule, one line per entry: "MTWT  6:40am  In DRL until 1:40pm".
+// Entries that span a window or last all day light up while they're happening.
+void shortTime(char *out, size_t n, int minute)
+{
+    int hour = (minute / 60) % 24, m = minute % 60;
+    if (HOUR24)
+        snprintf(out, n, "%02d:%02d", hour, m);
+    else
+        snprintf(out, n, "%d:%02d%s", (hour % 12) ? hour % 12 : 12, m, hour < 12 ? "am" : "pm");
+}
+
+// Turns a schedule file (UTF-8) into what the fonts can draw, like cleanText() in the
+// designer: curly quotes, dashes, "..." and no-break spaces become plain characters, a
+// tab becomes "|", the degree sign becomes the fonts' code 127 and anything else
+// outside printable ASCII is dropped. Writes at most cap characters plus a 0 to out.
+// Returns the cleaned length.
+size_t cleanScheduleText(const uint8_t *in, size_t n, char *out, size_t cap)
+{
+    size_t o = 0;
+    auto put = [&](const char *t) {
+        for (; *t && o < cap; t++)
+            out[o++] = *t;
+    };
+    for (size_t i = 0; i < n; i++)
+    {
+        uint8_t c = in[i];
+        if (c == '\t')
+            put("|");
+        else if (c == '\n' || (c >= 32 && c < 127))
+        {
+            char t[2] = {(char)c, 0};
+            put(t);
+        }
+        else if (c == 0xC2 && i + 1 < n && (in[i + 1] == 0xA0 || in[i + 1] == 0xB0))
+            put(in[++i] == 0xA0 ? " " : "\177");
+        else if (c == 0xE2 && i + 2 < n && in[i + 1] == 0x80)
+        {
+            uint8_t d = in[i + 2];
+            i += 2;
+            if (d == 0x98 || d == 0x99)
+                put("'");
+            else if (d == 0x9C || d == 0x9D)
+                put("\"");
+            else if (d == 0x93 || d == 0x94)
+                put("-");
+            else if (d == 0xA6)
+                put("...");
+        }
+        else if (c >= 0xC0)
+        {
+            // skip the rest of any other multi-byte character
+            while (i + 1 < n && (in[i + 1] & 0xC0) == 0x80)
+                i++;
+        }
+    }
+    out[o] = 0;
+    return o;
+}
+
+void trimCopy(char *out, size_t n, const char *from, const char *to)
+{
+    while (from < to && *from == ' ')
+        from++;
+    while (to > from && to[-1] == ' ')
+        to--;
+    snprintf(out, n, "%.*s", (int)(to - from), from);
+}
+
+// Reads the line starting at *p into line and moves *p past it. Returns false when the
+// line is blank or a comment (the caller skips it).
+bool nextFileLine(const char **p, FileLine &line)
+{
+    const char *start = *p, *end = strchr(start, '\n');
+    if (!end)
+        end = start + strlen(start);
+    *p = *end ? end + 1 : end;
+    while (start < end && *start == ' ')
+        start++;
+    while (end > start && end[-1] == ' ')
+        end--;
+    if (start == end || *start == '#')
+        return false;
+    line.hot = *start == '!';
+    if (line.hot)
+        start++;
+    const char *bar1 = (const char *)memchr(start, '|', end - start);
+    const char *bar2 = bar1 ? (const char *)memchr(bar1 + 1, '|', end - bar1 - 1) : nullptr;
+    line.days[0] = line.when[0] = line.what[0] = 0;
+    if (!bar1)
+    {
+        line.cols = 1;
+        trimCopy(line.what, sizeof(line.what), start, end);
+    }
+    else if (!bar2)
+    {
+        line.cols = 2;
+        trimCopy(line.days, sizeof(line.days), start, bar1);
+        trimCopy(line.what, sizeof(line.what), bar1 + 1, end);
+    }
+    else
+    {
+        line.cols = 3;
+        trimCopy(line.days, sizeof(line.days), start, bar1);
+        trimCopy(line.when, sizeof(line.when), bar1 + 1, bar2);
+        // Any further parts join the text, separated by single spaces; empty ones drop out.
+        size_t o = 0;
+        for (const char *seg = bar2 + 1; seg <= end;)
+        {
+            const char *stop = (const char *)memchr(seg, '|', end - seg);
+            if (!stop)
+                stop = end;
+            char part[128];
+            trimCopy(part, sizeof(part), seg, stop);
+            if (*part)
+                o += snprintf(line.what + o, o < sizeof(line.what) ? sizeof(line.what) - o : 0, "%s%s", o ? " " : "", part);
+            if (o >= sizeof(line.what))
+                break;
+            seg = stop + 1;
+        }
+    }
+    return true;
+}
+
+// Schedule from SCHEDULE_URL, one screen line per file line (mirrors the designer).
+void drawScheduleFile(const Element &el)
+{
+    const char *msg = nullptr;
+    if (!strlen(SCHEDULE_URL))
+        msg = "No schedule web address set";
+    else if (!haveSchedule)
+        msg = scheduleError ? "Couldn't load the schedule" : "Loading schedule...";
+    if (msg)
+    {
+        char t[64];
+        snprintf(t, sizeof(t), "%s", msg);
+        fitText(el.font, t, sizeof(t), el.width);
+        drawText(el.font, t, el.x, el.y, AL_LEFT, el.color);
+        return;
+    }
+    const char *p = scheduleText;
+    FileLine line;
+    for (int r = 0; r < el.rows && *p;)
+    {
+        if (!nextFileLine(&p, line))
+            continue;
+        int y = el.y + r * el.rowHeight;
+        uint8_t tc = line.hot ? el.highlightColor : el.timeColor, xc = line.hot ? el.highlightColor : el.color;
+        if (line.cols == 1)
+        {
+            fitText(el.font, line.what, sizeof(line.what), el.width);
+            drawText(el.font, line.what, el.x, y, AL_LEFT, xc);
+        }
+        else
+        {
+            if (line.cols == 2)
+            {
+                fitText(el.font, line.days, sizeof(line.days), el.timeWidth - 4);
+                drawText(el.font, line.days, el.x, y, AL_LEFT, tc);
+            }
+            else
+            {
+                fitText(el.font, line.days, sizeof(line.days), el.daysWidth - 4);
+                drawText(el.font, line.days, el.x, y, AL_LEFT, tc);
+                fitText(el.font, line.when, sizeof(line.when), el.timeWidth - el.daysWidth - 4);
+                drawText(el.font, line.when, el.x + el.daysWidth, y, AL_LEFT, tc);
+            }
+            fitText(el.font, line.what, sizeof(line.what), el.width - el.timeWidth);
+            drawText(el.font, line.what, el.x + el.timeWidth, y, AL_LEFT, xc);
+        }
+        r++;
+    }
+}
+
+void drawSchedule(const Element &el, const struct tm &now)
+{
+    if (el.box)
+        fillColor(el.x - el.boxPad, el.y - el.boxPad, el.width + 2 * el.boxPad, el.boxHeight + 2 * el.boxPad,
+                  el.boxColor);
+    if (SCHEDULE_FROM_URL)
+    {
+        drawScheduleFile(el);
+        return;
+    }
+    static const char DAY_LETTERS[] = "MTWTFSS";
+    int wday = (now.tm_wday + 6) % 7; // 0 = Monday
+    int nowMin = now.tm_hour * 60 + now.tm_min;
+    char days[12], when[16], what[128], t[16];
+    for (int r = 0; r < el.rows && r < SCHEDULE_COUNT; r++)
+    {
+        const SchedEntry &e = SCHEDULE[r];
+        int y = el.y + r * el.rowHeight;
+
+        if (e.days == 0x7F)
+            snprintf(days, sizeof(days), "Daily");
+        else
+        {
+            int n = 0;
+            for (int d = 0; d < 7; d++)
+                if (e.days & (1 << d))
+                    days[n++] = DAY_LETTERS[d];
+            days[n] = 0;
+        }
+        if (e.kind == ENTRY_ALL_DAY)
+            snprintf(when, sizeof(when), "All day");
+        else
+            shortTime(when, sizeof(when), e.start);
+        if (e.kind == ENTRY_RANGE)
+        {
+            shortTime(t, sizeof(t), e.end);
+            snprintf(what, sizeof(what), "%s until %s", e.text, t);
+        }
+        else
+            snprintf(what, sizeof(what), "%s", e.text);
+
+        bool hot = false;
+        if (el.highlight && (e.days & (1 << wday)))
+        {
+            if (e.kind == ENTRY_ALL_DAY)
+                hot = true;
+            else if (e.kind == ENTRY_RANGE)
+                hot = e.end > e.start ? (e.start <= nowMin && nowMin < e.end)
+                                      : (nowMin >= e.start || nowMin < e.end); // runs past midnight
+        }
+        uint8_t timeInk = hot ? el.highlightColor : el.timeColor;
+        drawText(el.font, days, el.x, y, AL_LEFT, timeInk);
+        drawText(el.font, when, el.x + el.daysWidth, y, AL_LEFT, timeInk);
+        fitText(el.font, what, sizeof(what), el.width - el.timeWidth);
+        drawText(el.font, what, el.x + el.timeWidth, y, AL_LEFT, hot ? el.highlightColor : el.color);
+    }
+}
+
+// The time of day in words for a minute after midnight (DAY_PARTS is sorted;
+// before the first start, the last one is still running from the day before).
+const char *dayPartAt(int minuteOfDay)
+{
+    if (DAY_PART_COUNT == 0)
+        return "";
+    const char *t = DAY_PARTS[DAY_PART_COUNT - 1].text;
+    for (int i = 0; i < DAY_PART_COUNT; i++)
+        if (DAY_PARTS[i].start <= minuteOfDay)
+            t = DAY_PARTS[i].text;
+    return t;
+}
+
+void drawElement(const Element &el, const struct tm &now)
+{
+    char buf[160];
+    switch (el.type)
+    {
+    case EL_SCHEDULE:
+        drawSchedule(el, now);
+        return;
+    case EL_CLOCK:
+        if (CLOCK_WORDS)
+            snprintf(buf, sizeof(buf), "%s", dayPartAt(now.tm_hour * 60 + now.tm_min));
+        else
+            fmtTime(buf, sizeof(buf), now.tm_hour, now.tm_min, SHOW_AMPM);
+        break;
+    case EL_DATE:
+        fill(buf, sizeof(buf), el.text, dateToken, now);
+        break;
+    case EL_TEMP:
+        fill(buf, sizeof(buf), el.text, weatherToken, now);
+        break;
+    case EL_UPDATED:
+        if (lastWeatherUtc)
+            fill(buf, sizeof(buf), el.text, updatedToken, now);
+        else
+            snprintf(buf, sizeof(buf), "%s", el.pending);
+        break;
+    case EL_BATTERY:
+        fill(buf, sizeof(buf), el.text, batteryToken, now);
+        break;
+    case EL_WIFI:
+    {
+        // 1-bit icon from layout.h, rows padded to whole bytes.
+        const uint8_t *bits = wifiOk ? WIFI_ON_BITS : WIFI_OFF_BITS;
+        uint8_t ink = wifiOk ? el.color : el.highlightColor;
+        int s = WIFI_ICON_SIZE, stride = (s + 7) / 8;
+        for (int j = 0; j < s; j++)
+            for (int i = 0; i < s; i++)
+                if (bits[j * stride + i / 8] & (0x80 >> (i & 7)))
+                    putInk(el.x + i, el.y + j, inkAt(ink, el.x + i, el.y + j));
+        return;
+    }
+    default:
+        snprintf(buf, sizeof(buf), "%s", el.text);
+    }
+    drawText(el.font, buf, el.x, el.y, el.align, el.color);
+}
+
+// Draws an 800x600 image from the SD card: 4 bits per pixel (two per byte, high
+// nibble first). gray: values are grays 0 (black) - 7 (white), for the 8-gray
+// mode; otherwise ink numbers (INK_BLACK / INK_WHITE).
+bool drawImageFile(const char *path, bool gray)
+{
+    if (!display.getSdCardOk() && !display.sdCardInit())
+        return false;
+    SdFile f;
+    if (!f.open(path, O_RDONLY))
+        return false;
+    static uint8_t row[W / 2];
+    for (int y = 0; y < H; y++)
+    {
+        if (f.read(row, sizeof(row)) != (int)sizeof(row))
+            break;
+        for (int x = 0; x < W; x += 2)
+        {
+            uint8_t a = row[x / 2] >> 4, b = row[x / 2] & 15;
+            if (gray)
+            {
+                display.drawPixel(x, y, a & 7);
+                display.drawPixel(x + 1, y, b & 7);
+            }
+            else
+            {
+                putInk(x, y, a);
+                putInk(x + 1, y, b);
+            }
+        }
+    }
+    f.close();
+    return true;
+}
+
+void drawMain(const struct tm &now)
+{
+    display.clearDisplay();
+    if (BG_INK != INK_WHITE)
+        fillColor(0, 0, W, H, BG_INK);
+    if (BG_IMAGE)
+        drawImageFile(BG_IMAGE, false);
+    for (int i = 0; i < ELEMENT_COUNT; i++)
+        drawElement(ELEMENTS[i], now);
+}
+
+// Returns false if the photo couldn't be read, so the caller can fall back.
+bool drawPhoto(int index, const struct tm &now)
+{
+    display.clearDisplay();
+    if (GALLERY_FILL != INK_WHITE)
+        fillColor(0, 0, W, H, GALLERY_FILL);
+    if (!drawImageFile(PHOTOS[index].file, true))
+        return false;
+    if (OVERLAY_VISIBLE)
+        drawElement(OVERLAY, now);
+    return true;
+}
+
+void drawMessage(const char *line1, const char *line2)
+{
+    display.selectDisplayMode(INKPLATE_1BIT);
+    display.clearDisplay();
+    display.setTextColor(BLACK);
+    display.setTextSize(3);
+    display.setCursor(30, 180);
+    display.print(line1);
+    display.setTextSize(2);
+    display.setCursor(30, 230);
+    display.print(line2);
+    display.display();
+}
+
+// ---------------------------------------------------------------- rotation
+// The rotation is worked out from the clock alone: main screen for
+// MAIN_MINUTES, then each photo for its minutes, repeating from midnight.
+// Returns -1 for the main screen or a photo index, and the local minute where
+// that stretch ends.
+
+int screenAt(uint32_t localMinute, uint32_t *segmentEnd)
+{
+    uint32_t cycle = MAIN_MINUTES;
+    for (int i = 0; i < PHOTO_COUNT; i++)
+        cycle += PHOTOS[i].minutes;
+    if (PHOTO_COUNT == 0 || cycle == 0)
+    {
+        *segmentEnd = localMinute + 1;
+        return -1;
+    }
+    uint32_t dayStart = localMinute - localMinute % 1440;
+    uint32_t pos = (localMinute - dayStart) % cycle;
+    uint32_t segStart = localMinute - pos;
+    uint32_t end = segStart + MAIN_MINUTES;
+    if (pos < MAIN_MINUTES)
+    {
+        *segmentEnd = end;
+        return -1;
+    }
+    for (int i = 0; i < PHOTO_COUNT; i++)
+    {
+        uint32_t s = end;
+        end += PHOTOS[i].minutes;
+        if (localMinute >= s && localMinute < end)
+        {
+            *segmentEnd = end;
+            return i;
+        }
+    }
+    *segmentEnd = localMinute + 1;
+    return -1;
+}
+
+// ---------------------------------------------------------------- network
+
+bool fetchWeather()
+{
+    WiFiClientSecure client;
+    client.setInsecure(); // no certificate check; fine for public weather data
+    HTTPClient http;
+    String url = String("https://api.openweathermap.org/data/2.5/weather?zip=") + WEATHER_ZIP + "," +
+                 WEATHER_COUNTRY + "&units=" + WEATHER_UNITS + "&appid=" + OPENWEATHER_KEY;
+    http.setTimeout(20000);
+    if (!http.begin(client, url))
+        return false;
+    int code = http.GET();
+    String body = http.getString();
+    http.end();
+    if (code != HTTP_CODE_OK)
+    {
+        Serial.printf("Weather HTTP %d: %s\n", code, body.c_str());
+        return false;
+    }
+    JsonDocument doc;
+    if (deserializeJson(doc, body))
+        return false;
+
+    // Weather also sets the time zone (the zip code's UTC offset, DST included).
+    tzOffset = doc["timezone"] | tzOffset;
+    JsonObject m = doc["main"];
+    wx.temp = lround(m["temp"].as<float>());
+    wx.feels = lround((m["feels_like"] | m["temp"].as<float>()));
+    wx.hi = lround((m["temp_max"] | m["temp"].as<float>()));
+    wx.lo = lround((m["temp_min"] | m["temp"].as<float>()));
+    wx.humidity = m["humidity"] | 0;
+    wx.wind = lround(doc["wind"]["speed"] | 0.0f);
+    strlcpy(wx.desc, doc["weather"][0]["description"] | "", sizeof(wx.desc));
+    wx.desc[0] = toupper(wx.desc[0]);
+    strlcpy(wx.main, doc["weather"][0]["main"] | "", sizeof(wx.main));
+    strlcpy(wx.city, doc["name"] | "", sizeof(wx.city));
+    return true;
+}
+
+// Collects a download, keeping the first SCHEDULE_MAX_BYTES (HTTPClient handles chunked replies).
+struct CappedBuffer : Stream
+{
+    uint8_t *buf;
+    size_t n = 0, cap;
+    CappedBuffer(uint8_t *b, size_t c) : buf(b), cap(c) {}
+    size_t write(uint8_t c) override
+    {
+        if (n < cap)
+            buf[n++] = c;
+        return 1;
+    }
+    size_t write(const uint8_t *b, size_t len) override
+    {
+        size_t k = len < cap - n ? len : cap - n;
+        memcpy(buf + n, b, k);
+        n += k;
+        return len;
+    }
+    int available() override { return 0; }
+    int read() override { return -1; }
+    int peek() override { return -1; }
+    void flush() override {}
+};
+
+void loadSchedule()
+{
+    Preferences prefs;
+    prefs.begin("inkplate", true);
+    haveSchedule = prefs.getBool("schedOk", false);
+    size_t n = haveSchedule ? prefs.getBytes("sched", scheduleText, SCHEDULE_MAX_BYTES) : 0;
+    scheduleText[n] = 0;
+    prefs.end();
+}
+
+// Reads SCHEDULE_URL and keeps it (in RAM and flash) if the read worked.
+bool fetchSchedule()
+{
+    WiFiClientSecure secure;
+    secure.setInsecure();
+    WiFiClient plain;
+    bool https = strncmp(SCHEDULE_URL, "https:", 6) == 0;
+    HTTPClient http;
+    http.setTimeout(20000);
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    if (!(https ? http.begin(secure, SCHEDULE_URL) : http.begin(plain, SCHEDULE_URL)))
+        return false;
+    int code = http.GET();
+    if (code != HTTP_CODE_OK)
+    {
+        Serial.printf("Schedule update failed: HTTP %d\n", code);
+        http.end();
+        return false;
+    }
+    static uint8_t raw[SCHEDULE_MAX_BYTES];
+    CappedBuffer body(raw, sizeof(raw));
+    int got = http.writeToStream(&body);
+    http.end();
+    if (got < 0 && body.n == 0)
+    {
+        Serial.printf("Schedule update failed: %s\n", HTTPClient::errorToString(got).c_str());
+        return false;
+    }
+    const uint8_t *start = raw;
+    size_t len = body.n;
+    if (len >= 3 && raw[0] == 0xEF && raw[1] == 0xBB && raw[2] == 0xBF) // byte order mark
+        start += 3, len -= 3;
+    size_t n = cleanScheduleText(start, len, scheduleText, SCHEDULE_MAX_BYTES);
+    haveSchedule = true;
+    Preferences prefs;
+    prefs.begin("inkplate", false);
+    prefs.putBytes("sched", scheduleText, n);
+    prefs.putBool("schedOk", true);
+    prefs.end();
+    return true;
+}
+
+bool scheduleDue(uint32_t slack)
+{
+    return SCHEDULE_FROM_URL && strlen(SCHEDULE_URL) && display.rtc.getEpoch() + slack >= nextScheduleUtc;
+}
+
+// Connects to WiFi; sets the RTC from NTP and fetches weather when that's due (or
+// first is set), and reads the schedule file when that's due.
+// Returns true if the RTC now holds a good time.
+// slack: also count things due within that many seconds as due.
+bool goOnline(bool first, uint32_t slack)
+{
+    if (!strlen(WIFI_SSID))
+    {
+        wifiOk = false;
+        return display.rtc.isSet();
+    }
+
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    uint32_t t0 = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - t0 < 20000)
+        delay(100);
+    if (WiFi.status() != WL_CONNECTED)
+    {
+        Serial.println("WiFi failed");
+        wifiOk = false;
+        WiFi.mode(WIFI_OFF);
+        uint32_t now = display.rtc.getEpoch();
+        if (first || now + slack >= nextFetchUtc)
+            nextFetchUtc = now + 5 * 60; // try again in 5 minutes
+        if (scheduleDue(slack))
+            nextScheduleUtc = now + 5 * 60;
+        return display.rtc.isSet();
+    }
+
+    wifiOk = true;
+    if (first || display.rtc.getEpoch() + slack >= nextFetchUtc)
+    {
+        // NTP gives UTC; the RTC keeps UTC and the zone offset is applied when drawing.
+        configTime(0, 0, "pool.ntp.org");
+        t0 = millis();
+        while (time(nullptr) < 1700000000 && millis() - t0 < 10000)
+            delay(100);
+        if (time(nullptr) >= 1700000000)
+            display.rtc.setEpoch(time(nullptr));
+
+        uint32_t now = display.rtc.getEpoch();
+        nextFetchUtc = now + WEATHER_MINUTES * 60;
+        if (strlen(OPENWEATHER_KEY))
+        {
+            if (fetchWeather())
+                lastWeatherUtc = now;
+            else
+                nextFetchUtc = now + 5 * 60;
+        }
+    }
+
+    if (scheduleDue(slack))
+    {
+        // A failed read keeps the last schedule on screen and tries again in 5 minutes.
+        bool ok = fetchSchedule();
+        scheduleError = !ok;
+        nextScheduleUtc = display.rtc.getEpoch() + (ok ? SCHEDULE_REFRESH_MINUTES * 60 : 5 * 60);
+    }
+
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+    return display.rtc.isSet();
+}
+
+// ---------------------------------------------------------------- main
+
+void sleepUntil(uint32_t wakeUtc)
+{
+    display.sdCardSleep();
+    display.rtc.clearAlarmFlag();
+    display.rtc.setAlarmEpoch(wakeUtc, RTC_ALARM_MATCH_DHHMMSS);
+    esp_sleep_enable_ext0_wakeup(GPIO_NUM_39, 0); // RTC alarm pin, active low
+    Serial.flush();
+    esp_deep_sleep_start();
+}
+
+// Words clock: the next local minute (since 1970) when the screen needs redrawing:
+// a new time of day, midnight (the date), a schedule entry starting or ending
+// today, or weather / the schedule file coming due.
+uint32_t nextChangeMinute(uint32_t minute)
+{
+    uint32_t day = minute - minute % 1440, m = minute % 1440;
+    uint32_t best = day + 1440;
+    for (int i = 0; i < DAY_PART_COUNT; i++)
+        if ((uint32_t)DAY_PARTS[i].start > m && day + DAY_PARTS[i].start < best)
+            best = day + DAY_PARTS[i].start;
+    if (!SCHEDULE_FROM_URL)
+    {
+        int wday = (day / 1440 + 3) % 7; // 1970-01-01 was a Thursday; 0 = Monday
+        for (int i = 0; i < SCHEDULE_COUNT; i++)
+        {
+            const SchedEntry &e = SCHEDULE[i];
+            if (e.kind != ENTRY_RANGE || !(e.days & (1 << wday)))
+                continue;
+            if ((uint32_t)e.start > m && day + e.start < best)
+                best = day + e.start;
+            if ((uint32_t)e.end > m && day + e.end < best)
+                best = day + e.end;
+        }
+    }
+    uint32_t due[2] = {nextFetchUtc, SCHEDULE_FROM_URL && strlen(SCHEDULE_URL) ? nextScheduleUtc : 0};
+    for (uint32_t u : due)
+    {
+        uint32_t dm = (uint32_t)(((int64_t)u + tzOffset + 59) / 60);
+        if (u && dm > minute && dm < best)
+            best = dm;
+    }
+    return best;
+}
+
+uint32_t leadSec(int screen)
+{
+    return (leadMs[screen >= 0] + 999) / 1000;
+}
+
+// Draws the screen for a stretch into the display buffer, switching to the
+// 8-gray mode for a photo. Returns the screen actually drawn (-1 if the photo
+// couldn't be read and the main screen was drawn instead).
+int drawScreen(int screen, const struct tm &local)
+{
+    if (screen >= 0)
+    {
+        display.selectDisplayMode(INKPLATE_3BIT);
+        if (drawPhoto(screen, local))
+            return screen;
+    }
+    display.selectDisplayMode(INKPLATE_1BIT);
+    drawMain(local);
+    return -1;
+}
+
+struct tm localTm(uint32_t minute)
+{
+    time_t t = (time_t)minute * 60;
+    struct tm out;
+    gmtime_r(&t, &out);
+    return out;
+}
+
+void setup()
+{
+    Serial.begin(115200);
+    display.begin();
+    display.rtc.clearAlarmFlag();
+    if (SCHEDULE_FROM_URL)
+        loadSchedule();
+
+    bool woke = esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0;
+    bool onlineFirst = !woke || !display.rtc.isSet();
+    if (!woke)
+    {
+        shownScreen = -2; // power-up or reset: we don't know what's on the panel
+        uint64_t mac = ESP.getEfuseMac(); // the WiFi station address; first byte is the lowest
+        Serial.printf("WiFi MAC address: %02x:%02x:%02x:%02x:%02x:%02x\n", (int)(mac & 0xff), (int)(mac >> 8 & 0xff),
+                      (int)(mac >> 16 & 0xff), (int)(mac >> 24 & 0xff), (int)(mac >> 32 & 0xff), (int)(mac >> 40 & 0xff));
+    }
+
+    // Power-up: get the time (and weather) before the first draw.
+    if (onlineFirst && !goOnline(true, 0))
+    {
+        drawMessage("No clock time yet", "Check WiFi settings in secrets.h");
+        shownScreen = -2;
+        esp_sleep_enable_timer_wakeup(5ULL * 60 * 1000000); // retry in 5 minutes
+        esp_deep_sleep_start();
+    }
+
+    // Show what will be current once the update finishes. The photo lead is
+    // the longer one, so use it to look ahead, then settle on the screen.
+    uint32_t now = display.rtc.getEpoch();
+    uint32_t segEnd;
+    uint32_t minute = (now + tzOffset + leadSec(0) + 2) / 60;
+    int screen = screenAt(minute, &segEnd);
+    if (screen >= 0)
+    {
+        minute = (now + tzOffset + leadSec(screen) + 2) / 60;
+        screen = screenAt(minute, &segEnd);
+    }
+    struct tm local = localTm(minute);
+
+    // A quick (partial) update needs the main screen both before and after,
+    // and a count under FULL_REFRESH_EVERY. Redraw what's on the panel first
+    // and hand it to the library as the "before" picture.
+    bool quick = woke && shownScreen == -1 && screen < 0 && quickUpdates < FULL_REFRESH_EVERY;
+    if (quick)
+    {
+        display.selectDisplayMode(INKPLATE_1BIT);
+        drawMain(localTm(shownMinute));
+        display.preloadScreen();
+    }
+    shownVolts = display.readBattery();
+    int shown = drawScreen(screen, local);
+    if (quick && shown < 0)
+    {
+        display.partialUpdate(true);
+        quickUpdates++;
+    }
+    else
+    {
+        display.display();
+        quickUpdates = 0;
+    }
+    shownScreen = shown;
+    shownMinute = minute;
+
+    // Learn how long wake + draw + update takes on clean wakes (no WiFi).
+    if (!onlineFirst)
+    {
+        uint32_t &l = leadMs[shown >= 0];
+        l = (l * 3 + millis() + 500) / 4;
+        Serial.printf("%s took %lu ms, lead now %lu ms\n", quick && shown < 0 ? "Quick update" : "Full refresh", millis(), l);
+    }
+
+    // Weather, NTP and the schedule file happen after the update so they don't
+    // delay the clock; then the main screen is quickly updated to show them.
+    // (The words clock wakes right at the due time, so allow a little slack.)
+    uint32_t slack = CLOCK_WORDS ? 120 : 0;
+    if (!onlineFirst && (display.rtc.getEpoch() + slack >= nextFetchUtc || scheduleDue(slack)))
+    {
+        goOnline(false, slack);
+        if (shown < 0)
+        {
+            display.preloadScreen(); // the buffer still holds what's on the panel
+            drawMain(local);
+            display.partialUpdate(true);
+            quickUpdates++;
+        }
+    }
+
+    // Next change: on the main screen or a photo with the clock over it, the
+    // next clock change (or the end of this stretch, if sooner); otherwise when
+    // this photo's time is up.
+    bool clockShown = shown < 0 || OVERLAY_VISIBLE;
+    uint32_t step = UPDATE_MINUTES ? UPDATE_MINUTES : 1;
+    uint32_t nextMinute = segEnd;
+    if (clockShown)
+    {
+        nextMinute = CLOCK_WORDS ? nextChangeMinute(minute) : (minute / step + 1) * step;
+        if (PHOTO_COUNT > 0 && segEnd > minute && segEnd < nextMinute)
+            nextMinute = segEnd;
+    }
+    uint32_t dummy;
+    int nextScreen = screenAt(nextMinute, &dummy);
+    uint32_t wake = nextMinute * 60 - tzOffset - leadSec(nextScreen);
+    now = display.rtc.getEpoch();
+    while (wake <= now + 2)
+        wake += 60;
+    sleepUntil(wake);
+}
+
+void loop()
+{
+    // Never reached: the board restarts in setup() after each deep sleep.
+}
+</script>
+<script type="text/plain" id="fw-types">
+// Types shared by the generated layout.h and fonts.h. Made by Inkplate 6COLOR Designer.
+#pragma once
+#include <stddef.h>
+#include <stdint.h>
+#include <time.h>
+
+// Looks up one {token} for fill(). Declared here rather than in the .ino because
+// the Arduino build puts function prototypes above anything typedef'd in the sketch.
+typedef bool (*Lookup)(const char *name, char *out, size_t n, const struct tm &now);
+
+// One glyph of a designer font. Pixels are packed row by row, MSB first,
+// starting at byte `offset` of the font's bitmap. The bottom row sits `yoff`
+// pixels above the baseline, the left column `xoff` pixels right of the pen.
+struct DGlyph
+{
+    uint32_t offset;
+    uint16_t w, h;
+    int16_t xoff, yoff, adv;
+};
+
+// Character codes 32..127; 127 is the degree sign.
+struct DFont
+{
+    const uint8_t *bits;
+    const DGlyph *glyphs;
+    int16_t ascent, descent;
+};
+
+enum ElementType
+{
+    EL_CLOCK,
+    EL_DATE,
+    EL_TEMP,
+    EL_UPDATED,
+    EL_TEXT,
+    EL_SCHEDULE,
+    EL_BATTERY,
+    EL_WIFI // icon: color = connected ink, highlightColor = no-WiFi ink, width = size
+};
+
+enum TextAlign
+{
+    AL_LEFT,
+    AL_CENTER,
+    AL_RIGHT
+};
+
+// x, y is the top-left of the text's ascent (or the anchor point for center/right).
+struct Element
+{
+    uint8_t type;
+    int16_t x, y;
+    uint8_t align;
+    const DFont *font;
+    uint8_t color;       // colors here and below are numbers into PATTERNS in layout.h
+    const char *text;    // label text, or the format for date / weather / updated / battery
+    const char *pending; // "updated" before the first weather fetch
+    // schedule only: one line per entry, days at x, time at x + daysWidth, text at x + timeWidth
+    uint8_t timeColor, highlightColor, rows;
+    int16_t rowHeight, daysWidth, timeWidth, width;
+    bool box;
+    uint8_t boxColor;
+    int16_t boxPad, boxHeight;
+    bool highlight;
+};
+
+enum EntryKind
+{
+    ENTRY_AT,     // at a time
+    ENTRY_RANGE,  // from a time until an end time
+    ENTRY_ALL_DAY
+};
+
+struct SchedEntry
+{
+    uint8_t kind;
+    int16_t start, end; // minutes after midnight
+    uint8_t days;       // bit 0 = Monday ... bit 6 = Sunday
+    const char *text;
+};
+
+// A time of day for the words clock: shown from start (minutes after midnight)
+// until the next one starts.
+struct DayPart
+{
+    int16_t start;
+    const char *text;
+};
+
+struct Photo
+{
+    const char *file; // on the microSD card
+    uint16_t minutes;
+};
+
+// One line of a schedule file read from SCHEDULE_URL. "|" splits it into days, time
+// and text; with two parts the first goes under the days and times; with none it runs
+// the full width. "!" in front means the happening-now color, "#" in front leaves the
+// line out. Declared here for the same reason as Lookup.
+struct FileLine
+{
+    char days[48], when[48], what[128];
+    uint8_t cols; // 1, 2 or 3
+    bool hot;
+};
+</script>
+<script>
+"use strict";
+// Which board this designer is for; tools/build_designer.py fills it in.
+const BOARD = {"id": "bw", "name": "Inkplate 6", "W": 800, "H": 600, "bw": true, "sketch": "Inkplate6Display", "board": "Soldered Inkplate6", "store": "ip6bw", "zip": "inkplate6-display.zip"};
+const W = BOARD.W, H = BOARD.H;
+const $ = (s) => document.querySelector(s);
+const FAMILIES = [
+  { id: "sans", label: "Sans (Arial)", css: "Arial, Helvetica, sans-serif" },
+  { id: "serif", label: "Serif (Georgia)", css: "Georgia, 'Times New Roman', serif" },
+  { id: "mono", label: "Monospace (Courier)", css: "'Courier New', Courier, monospace" },
+  { id: "Orbitron", label: "Orbitron (digital)", css: "'Orbitron', Arial, sans-serif", g: 1 },
+  { id: "Share Tech Mono", label: "Share Tech Mono", css: "'Share Tech Mono', 'Courier New', monospace", g: 1 },
+  { id: "VT323", label: "VT323 (terminal)", css: "'VT323', 'Courier New', monospace", g: 1 },
+  { id: "Press Start 2P", label: "Press Start 2P (8-bit)", css: "'Press Start 2P', 'Courier New', monospace", g: 1 },
+  { id: "Oswald", label: "Oswald (condensed)", css: "'Oswald', Arial, sans-serif", g: 1 },
+  { id: "Roboto Condensed", label: "Roboto Condensed", css: "'Roboto Condensed', Arial, sans-serif", g: 1 },
+  { id: "Bebas Neue", label: "Bebas Neue (caps)", css: "'Bebas Neue', Arial, sans-serif", g: 1 },
+  { id: "Nunito", label: "Nunito (rounded)", css: "'Nunito', Arial, sans-serif", g: 1 },
+  { id: "Lora", label: "Lora (serif)", css: "'Lora', Georgia, serif", g: 1 },
+];
+// The panel's seven inks, numbered as the Inkplate library numbers them.
+// The RGB values approximate how each ink looks on the panel; photos are dithered against them.
+const INKS = BOARD.bw ? [
+  { id: "black", n: 0, name: "Black", c: "INK_BLACK", rgb: [28, 28, 32] },
+  { id: "white", n: 1, name: "White", c: "INK_WHITE", rgb: [236, 235, 227] },
+] : [
+  { id: "black", n: 0, name: "Black", c: "INKPLATE_BLACK", rgb: [28, 28, 32] },
+  { id: "white", n: 1, name: "White", c: "INKPLATE_WHITE", rgb: [236, 235, 227] },
+  { id: "green", n: 2, name: "Green", c: "INKPLATE_GREEN", rgb: [46, 112, 66] },
+  { id: "blue", n: 3, name: "Blue", c: "INKPLATE_BLUE", rgb: [46, 60, 130] },
+  { id: "red", n: 4, name: "Red", c: "INKPLATE_RED", rgb: [170, 48, 42] },
+  { id: "yellow", n: 5, name: "Yellow", c: "INKPLATE_YELLOW", rgb: [228, 202, 62] },
+  { id: "orange", n: 6, name: "Orange", c: "INKPLATE_ORANGE", rgb: [204, 106, 50] },
+];
+// Photos: the black-and-white board shows them in its 8-gray mode (0 = black ... 7 = white).
+const PHOTO_INKS = BOARD.bw ? Array.from({ length: 8 }, (_, i) => ({ id: "gray" + i, n: i, name: "Gray " + i,
+  rgb: [0, 1, 2].map((q) => Math.round(INKS[0].rgb[q] + (INKS[1].rgb[q] - INKS[0].rgb[q]) * i / 7)) })) : INKS;
+const inkOf = (id) => INKS.find((i) => i.id === id) || INKS[0];
+const inkRGB = (id) => inkOf(id).rgb;
+const inkCss = (id) => `rgb(${inkRGB(id).join(",")})`;
+// A color setting is either an ink id ("blue") or a mixed color ("#3a6ea5").
+// Mixed colors are drawn as an 8x8 pattern of inks, the same on the preview
+// and on the device (the export writes the patterns into layout.h).
+const isMix = (v) => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v);
+const colorRGB = (v) => isMix(v) ? [1, 3, 5].map((i) => parseInt(v.slice(i, i + 2), 16)) : inkRGB(v);
+const colorCss = (v) => `rgb(${colorRGB(v).join(",")})`;
+const hexOf = (rgb) => "#" + rgb.map((c) => clamp(Math.round(c), 0, 255).toString(16).padStart(2, "0")).join("");
+// Ordered-dither thresholds, 0-63, indexed y * 8 + x.
+const BAYER8 = Array.from({ length: 64 }, (_, i) => {
+  const x = i & 7, y = i >> 3; let v = 0;
+  for (let b = 0; b < 3; b++) v |= ((((x >> b) ^ (y >> b)) & 1) << 1 | (y >> b) & 1) << (4 - 2 * b);
+  return v;
+});
+const patternCache = new Map();
+// Ink numbers for the 64 pixels of a color's 8x8 tile. Tries every mix of up to three inks
+// (in 64ths for one or two inks, 16ths for three) and keeps the one whose average comes
+// closest, with a small charge per extra ink so a near-solid color stays solid and greys
+// use black and white. The picks are laid out darkest to lightest along the Bayer
+// thresholds so the mix looks even.
+const MIX_EXTRA_INK = 150;
+function inkDist(a, b) {
+  const rm = (a[0] + b[0]) / 2, dr = a[0] - b[0], dg = a[1] - b[1], db = a[2] - b[2];
+  return (2 + rm / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rm) / 256) * db * db;
+}
+function bestMix(rgb) {
+  let best = null, bestCost = Infinity;
+  const consider = (inks, counts) => {
+    const m = [0, 1, 2].map((q) => inks.reduce((sum, n, i) => sum + counts[i] * INKS[n].rgb[q], 0) / 64);
+    const cost = inkDist(m, rgb) + MIX_EXTRA_INK * (inks.length - 1);
+    if (cost < bestCost) { bestCost = cost; best = { inks, counts }; }
+  };
+  for (let a = 0; a < INKS.length; a++) {
+    consider([a], [64]);
+    for (let b = a + 1; b < INKS.length; b++) {
+      for (let i = 1; i < 64; i++) consider([a, b], [i, 64 - i]);
+      for (let c = b + 1; c < INKS.length; c++)
+        for (let i = 4; i < 64; i += 4) for (let j = 4; i + j < 64; j += 4) consider([a, b, c], [i, j, 64 - i - j]);
+    }
+  }
+  return best;
+}
+function patternOf(v) {
+  const key = isMix(v) ? v.toLowerCase() : inkOf(v).id;
+  let pat = patternCache.get(key);
+  if (pat) return pat;
+  pat = new Uint8Array(64);
+  if (!isMix(v)) pat.fill(inkOf(v).n);
+  else {
+    const { inks, counts } = bestMix(colorRGB(v)), picks = [];
+    inks.forEach((n, i) => { for (let k = 0; k < counts[i]; k++) picks.push(n); });
+    const lum = (n) => { const p = INKS[n].rgb; return 299 * p[0] + 587 * p[1] + 114 * p[2]; };
+    picks.sort((a, b) => lum(a) - lum(b) || a - b);
+    for (let i = 0; i < 64; i++) pat[i] = picks[BAYER8[i]];
+  }
+  patternCache.set(key, pat);
+  return pat;
+}
+const ANCHOR = { left: 0, center: 0.5, right: 1 };
+const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const CODES = []; for (let c = 32; c < 127; c++) CODES.push(c); CODES.push(176); // 176 (°) is stored as code 127
+const TYPE_LABEL = { clock: "clock", date: "date", temp: "weather", updated: "updated", schedule: "schedule", text: "text", battery: "battery", wifi: "wifi" };
+
+/* ------------------------------------------------------------ state */
+const SAMPLE_SCHEDULE_TEXT = `# Lines starting with # are left out
+MTWT | 6:40am | In DRL until 1:40pm
+F | All day | Work from home
+Sa | 10:00am | Farmers market
+Next week | Conference in Chicago
+!Office closed Nov 26 and 27
+`;
+const DEFAULT_PARTS = [
+  { start: "05:00", text: "Early morning" }, { start: "08:00", text: "Morning" }, { start: "12:00", text: "Midday" },
+  { start: "13:00", text: "Afternoon" }, { start: "17:00", text: "Evening" }, { start: "20:00", text: "Night" }, { start: "23:00", text: "Late night" },
+];
+function exampleState() {
+  return {
+    v: 7,
+    previewDay: "",
+    background: { ink: "white", image: null, imageName: "" },
+    time: { hour24: false, ampm: true, style: "words", parts: DEFAULT_PARTS.map((p) => ({ ...p })) },
+    elements: [
+      { id: "clock", type: "clock", name: "Clock", x: 26, y: 26, align: "left", font: { family: "sans", size: 44, weight: 700 }, color: "black", visible: true },
+      { id: "date", type: "date", name: "Date", x: 26, y: 120, align: "left", font: { family: "sans", size: 40, weight: 400 }, color: "blue", visible: true, format: "{weekday}, {month} {day}" },
+      { id: "temp", type: "temp", name: "Temperature", x: 576, y: 20, align: "right", font: { family: "Oswald", size: 56, weight: 700 }, color: "orange", visible: true, format: "{temp}{unit}" },
+      { id: "cond", type: "temp", name: "Conditions", x: 576, y: 94, align: "right", font: { family: "sans", size: 24, weight: 400 }, color: "blue", visible: true, format: "{desc}" },
+      { id: "heading", type: "text", name: "Schedule heading", x: 28, y: 180, align: "left", font: { family: "sans", size: 22, weight: 700 }, color: "blue", visible: true, text: "My week" },
+      { id: "sched", type: "schedule", name: "Schedule", x: 28, y: 216, align: "left", font: { family: "sans", size: 26, weight: 400 }, color: "black", visible: true,
+        timeColor: "blue", highlightColor: "red", rows: 5, rowGap: 10, daysWidth: 112, timeWidth: 240, width: 544, box: false, boxColor: "yellow", boxPad: 8, highlight: true },
+      { id: "email", type: "text", name: "Email", x: 24, y: 418, align: "left", font: { family: "sans", size: 18, weight: 400 }, color: "blue", visible: true, text: "email : mbreilly@hep.upenn.edu" },
+      { id: "batt", type: "battery", name: "Battery", x: 300, y: 418, align: "center", font: { family: "sans", size: 18, weight: 400 }, color: "black", visible: false, format: "{volts} V" },
+      { id: "wifi", type: "wifi", name: "WiFi status", x: 404, y: 414, size: 24, color: "black", offColor: "red", visible: true },
+      { id: "updated", type: "updated", name: "Last updated", x: 576, y: 418, align: "right", font: { family: "sans", size: 18, weight: 400 }, color: "black", visible: true, format: "Updated {time}", pending: "Updating..." },
+    ],
+    schedule: { source: "manual", url: "", refreshMinutes: 15, previewText: SAMPLE_SCHEDULE_TEXT, entries: [
+      { kind: "range", time: "06:40", end: "13:40", text: "In DRL", days: [0, 1, 2, 3] },
+      { kind: "allday", time: "00:00", text: "Work from home", days: [4] },
+      { kind: "range", time: "16:00", end: "17:30", text: "Soccer practice", days: [1, 3] },
+      { kind: "time", time: "10:00", text: "Farmers market", days: [5] },
+    ] },
+    gallery: { enabled: true, images: [], defaultMinutes: 2, fit: "cover", fill: "white", dither: "fs", boost: 1.25,
+      overlay: { id: "overlay", type: "clock", name: "Clock over photos", x: 576, y: 384, align: "right", font: { family: "sans", size: 40, weight: 700 }, color: "white", visible: true } },
+    timing: { mainMinutes: 10, weatherMinutes: 10, updateMinutes: 5, fullEvery: 20 },
+    weather: { zip: "19104", country: "US", units: "imperial", offsetHours: -4 },
+    sample: { temp: 68, desc: "Partly cloudy", humidity: 54, city: "Philadelphia", volts: 4.05, wifi: true },
+  };
+}
+// The black-and-white board: 800x600, so the example layout is scaled up and the inks become black.
+function bwExample(st) {
+  const kx = W / 600, ky = H / 448, kf = 4 / 3, bwInk = (v) => (v === "white" ? "white" : "black");
+  const scaleEl = (e) => {
+    e.x = Math.round(e.x * kx); e.y = Math.round(e.y * ky);
+    if (e.font) e.font = { ...e.font, size: Math.round(e.font.size * kf) };
+    for (const k of ["color", "timeColor", "highlightColor", "boxColor", "offColor"]) if (e[k] != null) e[k] = bwInk(e[k]);
+    for (const k of ["rowGap", "daysWidth", "timeWidth", "width", "boxPad", "size"]) if (e[k] != null) e[k] = Math.round(e[k] * kx);
+  };
+  st.elements.forEach(scaleEl); scaleEl(st.gallery.overlay);
+  const ck = st.elements.find((e) => e.id === "clock"), dt = st.elements.find((e) => e.id === "date");
+  Object.assign(ck, { x: 30, y: 22, font: { family: "Orbitron", size: 96, weight: 700 } });
+  Object.assign(dt, { x: 34, y: 150 });
+  st.elements.find((e) => e.id === "heading").y = 236;
+  st.elements.find((e) => e.id === "sched").y = 284;
+  st.time.style = "time";
+  st.timing.updateMinutes = 1;
+  st.gallery.fill = "white";
+  st.background.ink = "white";
+  st.gallery.overlay.visible = false; // photos can only do full refreshes, so no clock over them by default
+  return st;
+}
+if (BOARD.bw) { const ex = exampleState; exampleState = () => bwExample(ex()); }
+let S = exampleState();
+let selected = "clock";
+let view = "main";
+let galleryIndex = 0;
+let boxes = {};
+let sampleIds = new Set();
+
+/* ------------------------------------------------------------ fonts */
+const rasterCache = new Map();
+const famCss = (id) => (FAMILIES.find((f) => f.id === id) || FAMILIES[0]).css;
+const fontKey = (f) => `${f.family}|${f.size}|${f.weight}`;
+function raster(font) {
+  const key = fontKey(font);
+  let r = rasterCache.get(key);
+  if (r) return r;
+  const Sz = font.size, CW = Sz * 4 + 8, CH = Sz * 3 + 8, ox = Sz, by = Sz * 2;
+  const cv = document.createElement("canvas"); cv.width = CW; cv.height = CH;
+  const ctx = cv.getContext("2d", { willReadFrequently: true });
+  ctx.font = `${font.weight} ${Sz}px ${famCss(font.family)}`;
+  ctx.textBaseline = "alphabetic"; ctx.fillStyle = "#000";
+  const glyphs = new Map(); let asc = 1, desc = 0;
+  for (const code of CODES) {
+    const ch = String.fromCharCode(code), slot = code === 176 ? 127 : code;
+    ctx.clearRect(0, 0, CW, CH); ctx.fillText(ch, ox, by);
+    const adv = Math.max(1, Math.round(ctx.measureText(ch).width));
+    const d = ctx.getImageData(0, 0, CW, CH).data;
+    let minx = CW, miny = CH, maxx = -1, maxy = -1;
+    for (let y = 0; y < CH; y++) for (let x = 0; x < CW; x++) {
+      if (d[(y * CW + x) * 4 + 3] >= 128) { if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y; }
+    }
+    if (maxx < 0) { glyphs.set(slot, { w: 0, h: 0, xoff: 0, yoff: 0, adv, bits: null }); continue; }
+    const w = maxx - minx + 1, h = maxy - miny + 1, bits = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) bits[y * w + x] = d[((miny + y) * CW + minx + x) * 4 + 3] >= 128 ? 1 : 0;
+    const g = { w, h, xoff: minx - ox, yoff: by - 1 - maxy, adv, bits };
+    glyphs.set(slot, g);
+    asc = Math.max(asc, g.yoff + h); desc = Math.max(desc, -g.yoff);
+  }
+  r = { key, font, glyphs, ascent: asc, descent: desc };
+  rasterCache.set(key, r);
+  return r;
+}
+const loadedFaces = new Set();
+function ensureFont(font) {
+  const fam = FAMILIES.find((f) => f.id === font.family);
+  if (!fam || !fam.g || !document.fonts) return;
+  const spec = `${font.weight} ${font.size}px '${fam.id}'`;
+  const tag = `${fam.id}|${font.weight}`;
+  if (loadedFaces.has(tag)) return;
+  loadedFaces.add(tag);
+  document.fonts.load(spec).then(() => {
+    for (const k of [...rasterCache.keys()]) if (k.startsWith(fam.id + "|")) rasterCache.delete(k);
+    render();
+  }).catch(() => {});
+}
+const fontIdent = (font) => `font_${font.family.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 12)}_${font.size}${font.weight >= 700 ? "b" : ""}`;
+// C source for one font in the designer's own format (see display_types.h).
+function fontToC(r) {
+  const id = fontIdent(r.font), bytes = [], glyphRows = [];
+  for (let code = 32; code <= 127; code++) {
+    const g = r.glyphs.get(code) || r.glyphs.get(63);
+    const offset = bytes.length;
+    if (g.bits) {
+      let acc = 0, n = 0;
+      for (const b of g.bits) { acc = (acc << 1) | b; if (++n === 8) { bytes.push(acc); acc = 0; n = 0; } }
+      if (n) bytes.push(acc << (8 - n));
+    }
+    glyphRows.push(`    {${offset}, ${g.w}, ${g.h}, ${g.xoff}, ${g.yoff}, ${g.adv}}, // ${code === 127 ? "degree" : JSON.stringify(String.fromCharCode(code)).replace(/\\/g, "backslash")}`);
+  }
+  if (!bytes.length) bytes.push(0);
+  const hex = [];
+  for (let i = 0; i < bytes.length; i += 20) hex.push("    " + bytes.slice(i, i + 20).map((b) => "0x" + b.toString(16).padStart(2, "0")).join(", ") + ",");
+  return { id, size: bytes.length + 96 * 14, text:
+`// ${r.font.family} ${r.font.size}px${r.font.weight >= 700 ? " bold" : ""}
+static const uint8_t ${id}_bits[] PROGMEM = {
+${hex.join("\n")}
+};
+static const DGlyph ${id}_glyphs[] PROGMEM = {
+${glyphRows.join("\n")}
+};
+static const DFont ${id} = {${id}_bits, ${id}_glyphs, ${r.ascent}, ${r.descent}};
+` };
+}
+
+/* ------------------------------------------------------------ text helpers (mirror the firmware) */
+const glyphOf = (r, ch) => r.glyphs.get(ch === "°" ? 127 : ch.charCodeAt(0)) || r.glyphs.get(63);
+function measure(r, text) { let w = 0; for (const ch of text) w += glyphOf(r, ch).adv; return w; }
+function labelWidth(r, text) {
+  let pen = 0, right = 0;
+  for (const ch of text) { const g = glyphOf(r, ch); right = Math.max(right, pen + (g.bits ? g.w + g.xoff : 1)); pen += g.adv; right = Math.max(right, pen); }
+  return right;
+}
+function fitText(r, text, maxW) {
+  if (maxW <= 0 || measure(r, text) <= maxW) return text;
+  while (text && measure(r, text + "...") > maxW) text = text.slice(0, -1);
+  return text.trimEnd() + "...";
+}
+function fill(tpl, vals) { for (const k in vals) tpl = tpl.split("{" + k + "}").join(String(vals[k])); return tpl; }
+function fmtTime(h, m, h24, ampm) {
+  let out = h24 ? `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}` : `${(h % 12) || 12}:${String(m).padStart(2, "0")}`;
+  if (!h24 && ampm) out += h < 12 ? " AM" : " PM";
+  return out;
+}
+function dateValues(d) {
+  const wd = WEEKDAYS[(d.getDay() + 6) % 7], mo = MONTHS[d.getMonth()];
+  return { weekday: wd, wkd: wd.slice(0, 3), month: mo, mon: mo.slice(0, 3), day: d.getDate(),
+    mm: String(d.getMonth() + 1).padStart(2, "0"), dd: String(d.getDate()).padStart(2, "0"), year: d.getFullYear() };
+}
+function weatherValues() {
+  const s = S.sample, t = Number(s.temp) || 0;
+  return { temp: t, feels: t - 2, hi: t + 5, lo: t - 9, desc: s.desc, main: (s.desc || "").split(" ").pop(), humidity: s.humidity,
+    wind: 7, city: s.city, unit: S.weather.units === "imperial" ? "°F" : "°C" };
+}
+const minToTime = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+const toMin = (t) => { const [h, m] = String(t || "0:0").split(":").map(Number); return (h || 0) * 60 + (m || 0); };
+function elText(el, now) {
+  const h24 = S.time.hour24, ampm = S.time.ampm;
+  switch (el.type) {
+    case "clock": { if (S.time.style === "words") return dayPartAt(now.getHours() * 60 + now.getMinutes()); const m = now.getMinutes(); return fmtTime(now.getHours(), m - m % updateMinutes(), h24, ampm); }
+    case "date": return fill(el.format, dateValues(now));
+    case "temp": return fill(el.format, weatherValues());
+    case "battery": return fill(el.format, { volts: (Number(S.sample.volts) || 0).toFixed(2) });
+    case "updated": { const t = new Date(now - (now.getMinutes() % S.timing.weatherMinutes) * 60000); return fill(el.format, { time: fmtTime(t.getHours(), t.getMinutes(), h24, true) }); }
+    default: return el.text || "";
+  }
+}
+const lineH = (el) => { const r = raster(el.font); return r.ascent + r.descent; };
+const rowHeight = (el) => lineH(el) + Number(el.rowGap || 0);
+const boxHeight = (el) => el.rows * rowHeight(el) - Number(el.rowGap || 0);
+
+/* ------------------------------------------------------------ images and dithering */
+function nearestInk(r, g, b, pal = INKS) {
+  let best = 0, bd = Infinity;
+  for (let i = 0; i < pal.length; i++) {
+    const p = pal[i].rgb, rm = (r + p[0]) / 2, dr = r - p[0], dg = g - p[1], db = b - p[2];
+    const d = (2 + rm / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rm) / 256) * db * db;
+    if (d < bd) { bd = d; best = i; }
+  }
+  return best;
+}
+// Returns ink indexes (0-6) for every pixel of a 600x448 ImageData.
+function ditherToInks(imageData, method, boost, pal = INKS) {
+  const src = imageData.data, n = W * H, buf = new Float32Array(n * 3), out = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    let r = src[i * 4], g = src[i * 4 + 1], b = src[i * 4 + 2];
+    if (boost !== 1) {
+      const l = 0.299 * r + 0.587 * g + 0.114 * b;
+      r = l + (r - l) * boost; g = l + (g - l) * boost; b = l + (b - l) * boost;
+    }
+    buf[i * 3] = r; buf[i * 3 + 1] = g; buf[i * 3 + 2] = b;
+  }
+  const spread = (x, y, er, eg, eb, f) => {
+    if (x < 0 || x >= W || y >= H) return;
+    const j = (y * W + x) * 3; buf[j] += er * f; buf[j + 1] += eg * f; buf[j + 2] += eb * f;
+  };
+  for (let y = 0; y < H; y++) {
+    const rtl = method === "fs" && (y & 1);
+    for (let k = 0; k < W; k++) {
+      const x = rtl ? W - 1 - k : k, i = y * W + x, j = i * 3;
+      const r = Math.max(0, Math.min(255, buf[j])), g = Math.max(0, Math.min(255, buf[j + 1])), b = Math.max(0, Math.min(255, buf[j + 2]));
+      const ink = nearestInk(r, g, b, pal); out[i] = ink;
+      if (method === "none") continue;
+      const p = pal[ink].rgb, er = r - p[0], eg = g - p[1], eb = b - p[2];
+      if (method === "fs") {
+        const d = rtl ? -1 : 1;
+        spread(x + d, y, er, eg, eb, 7 / 16); spread(x - d, y + 1, er, eg, eb, 3 / 16);
+        spread(x, y + 1, er, eg, eb, 5 / 16); spread(x + d, y + 1, er, eg, eb, 1 / 16);
+      } else {
+        const f = 1 / 8;
+        spread(x + 1, y, er, eg, eb, f); spread(x + 2, y, er, eg, eb, f); spread(x - 1, y + 1, er, eg, eb, f);
+        spread(x, y + 1, er, eg, eb, f); spread(x + 1, y + 1, er, eg, eb, f); spread(x, y + 2, er, eg, eb, f);
+      }
+    }
+  }
+  return out;
+}
+function inksToImageData(inks, pal = INKS) {
+  const id = new ImageData(W, H), d = id.data;
+  for (let i = 0; i < inks.length; i++) { const p = pal[inks[i]].rgb; d[i * 4] = p[0]; d[i * 4 + 1] = p[1]; d[i * 4 + 2] = p[2]; d[i * 4 + 3] = 255; }
+  return id;
+}
+// Cache of dithered images, keyed by image data + current dither settings.
+const ditherCache = new Map();
+// photo = true: a gallery photo (grays on the black-and-white board); false: the background.
+const palOf = (photo) => photo ? PHOTO_INKS : INKS;
+const ditherKey = (src, photo) => `${photo && BOARD.bw ? "g" : "i"}|${S.gallery.dither}|${S.gallery.boost}|${src.length}|${src.slice(-40)}`;
+const pendingDither = new Set();
+function dithered(src, photo) {
+  if (!src) return null;
+  const key = ditherKey(src, photo);
+  const c = ditherCache.get(key);
+  if (c) return c;
+  if (pendingDither.has(key)) return null;
+  pendingDither.add(key);
+  decodeNow(src).then((imgData) => {
+    const inks = ditherToInks(imgData, S.gallery.dither, Number(S.gallery.boost), palOf(photo));
+    const image = inksToImageData(inks, palOf(photo));
+    const cv = document.createElement("canvas"); cv.width = W; cv.height = H; cv.getContext("2d").putImageData(image, 0, 0);
+    ditherCache.set(key, { inks, image, canvas: cv });
+    pendingDither.delete(key);
+    if (ditherCache.size > 40) ditherCache.delete(ditherCache.keys().next().value);
+    render(); drawThumbs();
+  }).catch(() => pendingDither.delete(key));
+  return null;
+}
+function decodeNow(url) {
+  return new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => { const cv = document.createElement("canvas"); cv.width = W; cv.height = H; const c = cv.getContext("2d"); c.drawImage(im, 0, 0, W, H); res(c.getImageData(0, 0, W, H)); };
+    im.onerror = rej; im.src = url;
+  });
+}
+async function ditheredNow(src, photo) {
+  const c = ditherCache.get(ditherKey(src, photo));
+  if (c) return c.inks;
+  return ditherToInks(await decodeNow(src), S.gallery.dither, Number(S.gallery.boost), palOf(photo));
+}
+// Resizes a picture to 600x448 and keeps it as a JPEG; dithering happens later, so settings can change.
+function fitImage(source, fit, fillInk) {
+  const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+  const cx = cv.getContext("2d");
+  cx.fillStyle = colorCss(fillInk); cx.fillRect(0, 0, W, H);
+  const sw = source.naturalWidth || source.width, sh = source.naturalHeight || source.height;
+  const scale = fit === "contain" ? Math.min(W / sw, H / sh) : Math.max(W / sw, H / sh);
+  const dw = sw * scale, dh = sh * scale;
+  cx.imageSmoothingQuality = "high";
+  cx.drawImage(source, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  return cv.toDataURL("image/jpeg", 0.92);
+}
+function fileToImage(file) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file), im = new Image();
+    im.onload = () => { res(im); URL.revokeObjectURL(url); };
+    im.onerror = () => { rej(new Error("unreadable")); URL.revokeObjectURL(url); };
+    im.src = url;
+  });
+}
+function sampleImages() {
+  const make = (draw) => { const cv = document.createElement("canvas"); cv.width = W; cv.height = H; const c = cv.getContext("2d"); c.scale(W / 320, H / 240); draw(c); return fitImage(cv, "cover", "white"); };
+  const sunset = make((c) => {
+    const g = c.createLinearGradient(0, 0, 0, 240); g.addColorStop(0, "#1d2b64"); g.addColorStop(0.55, "#f8786b"); g.addColorStop(0.75, "#fcd27b"); c.fillStyle = g; c.fillRect(0, 0, 320, 240);
+    c.fillStyle = "#fff1c4"; c.beginPath(); c.arc(160, 170, 34, 0, Math.PI * 2); c.fill();
+    c.fillStyle = "#2a1838"; c.beginPath(); c.moveTo(0, 240); c.lineTo(0, 175); c.lineTo(70, 140); c.lineTo(130, 180); c.lineTo(205, 128); c.lineTo(320, 186); c.lineTo(320, 240); c.fill();
+    c.fillStyle = "rgba(255,255,255,.9)"; c.font = "bold 13px Arial"; c.fillText("Example photo", 12, 24);
+  });
+  const lake = make((c) => {
+    const g = c.createLinearGradient(0, 0, 0, 130); g.addColorStop(0, "#7ec8e3"); g.addColorStop(1, "#d6f0f7"); c.fillStyle = g; c.fillRect(0, 0, 320, 130);
+    c.fillStyle = "#3b6e4a"; c.beginPath(); c.moveTo(0, 130); c.lineTo(60, 70); c.lineTo(120, 130); c.lineTo(180, 60); c.lineTo(260, 130); c.lineTo(320, 90); c.lineTo(320, 130); c.fill();
+    const w = c.createLinearGradient(0, 130, 0, 240); w.addColorStop(0, "#2d7da6"); w.addColorStop(1, "#123e5c"); c.fillStyle = w; c.fillRect(0, 130, 320, 110);
+    c.fillStyle = "rgba(255,255,255,.5)"; for (let i = 0; i < 9; i++) c.fillRect(30 + i * 31, 150 + (i % 3) * 22, 18, 2);
+    c.fillStyle = "rgba(0,0,0,.7)"; c.font = "bold 13px Arial"; c.fillText("Example photo", 12, 24);
+  });
+  return [{ id: "ex1", name: "Example: sunset", src: sunset, minutes: null }, { id: "ex2", name: "Example: lake", src: lake, minutes: null }];
+}
+
+/* ------------------------------------------------------------ rendering */
+if (BOARD.bw) {
+  document.title = "Inkplate 6 Designer";
+  const set = (sel, t) => { const e = $(sel); if (e) e.textContent = t; };
+  set("#app-title", "Inkplate 6 Designer");
+  set("#app-sub", "Arrange the 800×600 black-and-white screen, then export an Arduino sketch and a microSD folder.");
+  set("#screen-size", "800 × 600 · black and white");
+  set("#preview-note", "The preview uses the same bitmap fonts the Inkplate will, in black and white. Grays are drawn as fine dot patterns, exactly as the screen will, and photos are shown in the panel's 8 grays. Play rotation runs one minute per second.");
+  set("#drop-note", "Each photo is resized to 800×600 and dithered to the panel's 8 grays. Dithering and boost apply to every photo and can be changed any time.");
+  set("#overlay-note", "Photos use the panel's gray mode, which can only do full refreshes. With the clock on, each photo redraws (with a flash) every time the clock changes. Turn it off and each photo stays put until its time is up.");
+  set("#update-note", "The Inkplate 6 changes just the pixels that differ (a quick update, about half a second, no flashing), so the clock can tick every minute. Quick updates leave faint ghosts over time, so every so often it does one full refresh (about a second, with a flash) to clean the screen. Weather and schedule changes show up right after they're fetched.");
+  $("#full-box").hidden = false;
+}
+document.querySelectorAll(".sk").forEach((e) => { e.textContent = BOARD.sketch; });
+$("#stage").width = W; $("#stage").height = H; $("#screen").style.aspectRatio = `${W} / ${H}`;
+const stage = $("#stage"), sctx = stage.getContext("2d");
+const frame = sctx.createImageData(W, H);
+// pat is a color's 8x8 ink pattern (patternOf), tiled from the screen's top-left like the firmware does.
+function fillRect(buf, x, y, w, h, pat) {
+  const x0 = Math.max(0, x), y0 = Math.max(0, y), x1 = Math.min(W, x + w), y1 = Math.min(H, y + h);
+  for (let yy = y0; yy < y1; yy++) for (let xx = x0; xx < x1; xx++) {
+    const rgb = INKS[pat[(yy & 7) * 8 + (xx & 7)]].rgb, i = (yy * W + xx) * 4;
+    buf[i] = rgb[0]; buf[i + 1] = rgb[1]; buf[i + 2] = rgb[2]; buf[i + 3] = 255;
+  }
+}
+function drawText(buf, font, text, x, y, align, pat) {
+  ensureFont(font);
+  // Same widths and rounding as the firmware's drawText()
+  const r = raster(font), w = labelWidth(r, text), left = x - (align === "center" ? Math.floor(w / 2) : align === "right" ? w : 0), base = y + r.ascent;
+  let pen = left;
+  for (const ch of text) {
+    const g = glyphOf(r, ch);
+    if (g.bits) for (let yy = 0; yy < g.h; yy++) for (let xx = 0; xx < g.w; xx++) {
+      if (!g.bits[yy * g.w + xx]) continue;
+      const px = pen + g.xoff + xx, py = base - g.yoff - g.h + yy;
+      if (px < 0 || py < 0 || px >= W || py >= H) continue;
+      const rgb = INKS[pat[(py & 7) * 8 + (px & 7)]].rgb, i = (py * W + px) * 4; buf[i] = rgb[0]; buf[i + 1] = rgb[1]; buf[i + 2] = rgb[2];
+    }
+    pen += g.adv;
+  }
+  return { x: left, y, w: Math.max(w, 4), h: r.ascent + r.descent };
+}
+// Mirrors drawSchedule() in the firmware. Days are 0 = Monday ... 6 = Sunday.
+const DAY_LETTER = "MTWTFSS";
+const DAY_ABBR = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+function previewNow(now) {
+  if (S.previewDay === "" || S.previewDay == null) return now;
+  const d = new Date(now); d.setDate(d.getDate() + (Number(S.previewDay) - (now.getDay() + 6) % 7)); return d;
+}
+function shortTime(min, h24) {
+  const h = Math.floor(min / 60) % 24, m = min % 60;
+  return h24 ? `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}` : `${(h % 12) || 12}:${String(m).padStart(2, "0")}${h < 12 ? "am" : "pm"}`;
+}
+// A schedule file as the device reads it (mirrors cleanScheduleText() and nextFileLine() in the firmware).
+const SWAPS = [["\u2018", "'"], ["\u2019", "'"], ["\u201c", '"'], ["\u201d", '"'], ["\u2013", "-"], ["\u2014", "-"], ["\u2026", "..."], ["\u00a0", " "], ["\t", "|"]];
+function cleanText(text) {
+  for (const [a, b] of SWAPS) text = text.split(a).join(b);
+  let out = ""; for (const ch of text) { const c = ch.codePointAt(0); if ((c >= 32 && c < 127) || c === 176) out += ch; }
+  return out;
+}
+function parseScheduleText(text) {
+  const rows = [];
+  for (const raw of text.split("\ufeff").join("").split("\n")) {
+    let line = cleanText(raw).trim();
+    if (!line || line[0] === "#") continue;
+    const hot = line[0] === "!";
+    if (hot) line = line.slice(1).trim();
+    const parts = line.split("|").map((p) => p.trim());
+    if (parts.length >= 3) rows.push({ days: parts[0], when: parts[1], what: parts.slice(2).filter(Boolean).join(" "), hot, layout: "cols3" });
+    else if (parts.length === 2) rows.push({ days: parts[0], when: "", what: parts[1], hot, layout: "cols2" });
+    else rows.push({ days: "", when: "", what: parts[0], hot, layout: "cols1" });
+  }
+  return rows;
+}
+// One line per entry: days, time, text. Spans and all-day entries light up while they're happening.
+function scheduleLines(el, now) {
+  if (S.schedule.source === "url") {
+    const msg = (what) => [{ days: "", when: "", what, hot: false, layout: "cols1" }];
+    if (!S.schedule.url.trim()) return msg("No schedule web address set");
+    if (!S.schedule.previewText.trim()) return msg("Loading schedule...");
+    return parseScheduleText(S.schedule.previewText).slice(0, el.rows);
+  }
+  const wday = (now.getDay() + 6) % 7, nm = now.getHours() * 60 + now.getMinutes(), h24 = S.time.hour24;
+  return S.schedule.entries.filter((e) => e.days && e.days.length).slice(0, el.rows).map((e) => {
+    const kind = e.kind || "time", start = toMin(e.time), end = toMin(e.end);
+    const days = e.days.length === 7 ? "Daily" : [...e.days].sort().map((d) => DAY_LETTER[d]).join("");
+    const when = kind === "allday" ? "All day" : shortTime(start, h24);
+    const what = kind === "range" ? `${e.text} until ${shortTime(end, h24)}` : e.text;
+    const today = e.days.includes(wday);
+    const hot = today && (kind === "allday" || (kind === "range" && (end > start ? start <= nm && nm < end : nm >= start || nm < end)));
+    return { days, when, what, hot, layout: "manual" };
+  });
+}
+// Times of day, sorted by start; each runs until the next one starts (the last wraps past midnight).
+const sortedParts = () => (S.time.parts || []).filter((p) => p.text && p.text.trim() && /^\d\d:\d\d$/.test(p.start || ""))
+  .map((p) => ({ start: toMin(p.start), text: p.text.trim() })).sort((a, b) => a.start - b.start);
+function dayPartAt(m) {
+  const parts = sortedParts(); if (!parts.length) return "";
+  let t = parts[parts.length - 1].text;
+  for (const p of parts) if (p.start <= m) t = p.text;
+  return t;
+}
+// How often the device redraws; the clock shows the last multiple of it.
+const updateMinutes = () => [1, 2, 5, 10, 15, 30].includes(Number(S.timing.updateMinutes)) ? Number(S.timing.updateMinutes) : 1;
+// WiFi icon, size x size, one byte per pixel (1 = ink). "Off" adds a slash.
+// The bits are exported to layout.h, so the device draws exactly these pixels.
+const wifiCache = new Map();
+function wifiBits(size, on) {
+  const key = size + (on ? "on" : "off");
+  if (wifiCache.has(key)) return wifiCache.get(key);
+  const c = document.createElement("canvas"); c.width = c.height = size;
+  const g = c.getContext("2d"), s = size, lw = Math.max(1.5, s * 0.11), cx = s / 2, cy = s * 0.86;
+  g.strokeStyle = g.fillStyle = "#000"; g.lineWidth = lw; g.lineCap = "round";
+  for (const r of [0.78, 0.53, 0.28]) { g.beginPath(); g.arc(cx, cy, r * s, -Math.PI * 0.75, -Math.PI * 0.25); g.stroke(); }
+  g.beginPath(); g.arc(cx, cy, Math.max(1, s * 0.09), 0, Math.PI * 2); g.fill();
+  if (!on) {
+    // Clear a gap either side of the slash so it reads against the arcs.
+    g.globalCompositeOperation = "destination-out"; g.lineWidth = lw * 2.6;
+    g.beginPath(); g.moveTo(s * 0.12, s * 0.1); g.lineTo(s * 0.88, s * 0.94); g.stroke();
+    g.globalCompositeOperation = "source-over"; g.lineWidth = lw;
+    g.beginPath(); g.moveTo(s * 0.12, s * 0.1); g.lineTo(s * 0.88, s * 0.94); g.stroke();
+  }
+  const d = g.getImageData(0, 0, s, s).data, bits = new Uint8Array(s * s);
+  for (let i = 0; i < s * s; i++) bits[i] = d[i * 4 + 3] >= 128 ? 1 : 0;
+  wifiCache.set(key, bits);
+  return bits;
+}
+function wifiSize(el) { return clamp(Math.round(Number(el.size) || 24), 8, 64); }
+function drawElement(buf, el, now) {
+  if (el.type === "wifi") {
+    const s = wifiSize(el), on = S.sample.wifi !== false, bits = wifiBits(s, on), pat = patternOf(on ? el.color : el.offColor);
+    for (let j = 0; j < s; j++) for (let i = 0; i < s; i++) if (bits[j * s + i]) fillRect(buf, el.x + i, el.y + j, 1, 1, pat);
+    return { x: el.x, y: el.y, w: s, h: s };
+  }
+  if (el.type === "schedule") {
+    const bh = boxHeight(el), pad = Number(el.boxPad || 0);
+    if (el.box) fillRect(buf, el.x - pad, el.y - pad, el.width + 2 * pad, bh + 2 * pad, patternOf(el.boxColor));
+    const r = raster(el.font), rh = rowHeight(el);
+    const dw = Number(el.daysWidth), tw = Number(el.timeWidth);
+    scheduleLines(el, now).forEach((e, i) => {
+      // Lines marked "!" in a schedule file always use the happening-now ink.
+      const hot = e.hot && (e.layout !== "manual" || el.highlight), y = el.y + i * rh;
+      const tc = patternOf(hot ? el.highlightColor : el.timeColor), xc = patternOf(hot ? el.highlightColor : el.color);
+      if (e.layout === "cols1") { drawText(buf, el.font, fitText(r, e.what, el.width), el.x, y, "left", xc); return; }
+      if (e.layout === "cols2") drawText(buf, el.font, fitText(r, e.days, tw - 4), el.x, y, "left", tc);
+      else if (e.layout === "cols3") {
+        drawText(buf, el.font, fitText(r, e.days, dw - 4), el.x, y, "left", tc);
+        drawText(buf, el.font, fitText(r, e.when, tw - dw - 4), el.x + dw, y, "left", tc);
+      } else {
+        drawText(buf, el.font, e.days, el.x, y, "left", tc);
+        drawText(buf, el.font, e.when, el.x + dw, y, "left", tc);
+      }
+      drawText(buf, el.font, fitText(r, e.what, el.width - tw), el.x + tw, y, "left", xc);
+    });
+    return { x: el.x, y: el.y, w: el.width, h: Math.max(bh, 6) };
+  }
+  return drawText(buf, el.font, elText(el, now), el.x, el.y, el.align, patternOf(el.color));
+}
+let playState = null;
+let flash = null; // { start } while the preview shows a refresh flash
+const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+function currentScreen() {
+  if (playState) return playState.mode === "main" ? { kind: "main" } : { kind: "gallery", index: playState.index };
+  return view === "main" ? { kind: "main" } : { kind: "gallery", index: galleryIndex };
+}
+function previewTime() { return playState ? new Date(playState.clock0 + (performance.now() - playState.t0) * 60) : new Date(); }
+const FLASH_SEQ = BOARD.bw ? ["black", "white", "black", "white"] : ["black", "white", "red", "yellow", "white", "black", "white"];
+function render() {
+  const buf = frame.data, now = previewNow(previewTime()), scr = currentScreen();
+  boxes = {};
+  if (flash) {
+    const k = Math.floor((performance.now() - flash.start) / 110);
+    if (k < FLASH_SEQ.length) { fillRect(buf, 0, 0, W, H, patternOf(FLASH_SEQ[k])); sctx.putImageData(frame, 0, 0); $("#sel").hidden = true; return; }
+    flash = null;
+  }
+  let base = null, src = null;
+  if (scr.kind === "main") src = S.background.image;
+  else { const im = activePhotos()[scr.index]; src = im ? im.src : null; }
+  if (src) { const d = dithered(src, scr.kind !== "main"); base = d ? d.image : null; }
+  if (base) buf.set(base.data);
+  else fillRect(buf, 0, 0, W, H, patternOf(scr.kind === "main" ? S.background.ink : S.gallery.fill));
+  if (scr.kind === "main") {
+    for (const el of S.elements) if (el.visible) boxes[el.id] = drawElement(buf, el, now);
+  } else {
+    const ov = S.gallery.overlay;
+    if (!S.gallery.enabled) drawText(buf, { family: "sans", size: 26, weight: 400 }, "The slideshow is off", 300, 210, "center", patternOf("blue"));
+    else if (!S.gallery.images.length) drawText(buf, { family: "sans", size: 26, weight: 400 }, "Add photos in the Gallery tab", 300, 210, "center", patternOf("blue"));
+    else if (!base) drawText(buf, { family: "sans", size: 22, weight: 400 }, "Dithering…", 300, 210, "center", patternOf("blue"));
+    if (ov.visible) boxes.overlay = drawElement(buf, ov, now);
+  }
+  sctx.putImageData(frame, 0, 0);
+  placeSelection();
+}
+function placeSelection() {
+  const b = boxes[selected], sel = $("#sel");
+  if (!b || playState) { sel.hidden = true; $("#coords").textContent = ""; return; }
+  sel.hidden = false;
+  const pad = 1;
+  Object.assign(sel.style, { left: ((b.x - pad) / W * 100) + "%", top: ((b.y - pad) / H * 100) + "%", width: ((b.w + 2 * pad) / W * 100) + "%", height: ((b.h + 2 * pad) / H * 100) + "%" });
+  const el = findEl(selected);
+  $("#sel-label").textContent = el.name;
+  $("#coords").textContent = `${el.name}: x ${el.x}, y ${el.y}`;
+}
+function findEl(id) { return id === "overlay" ? S.gallery.overlay : S.elements.find((e) => e.id === id); }
+
+/* ------------------------------------------------------------ dragging */
+const screen = $("#screen");
+let drag = null;
+function toDevice(ev) { const r = stage.getBoundingClientRect(); return { x: (ev.clientX - r.left) / r.width * W, y: (ev.clientY - r.top) / r.height * H }; }
+screen.addEventListener("pointerdown", (ev) => {
+  if (playState) return;
+  const p = toDevice(ev);
+  const ids = Object.keys(boxes).reverse();
+  const hit = ids.find((id) => { const b = boxes[id]; return p.x >= b.x - 3 && p.x <= b.x + b.w + 3 && p.y >= b.y - 3 && p.y <= b.y + b.h + 3; });
+  screen.focus();
+  if (!hit) return;
+  select(hit);
+  const el = findEl(hit);
+  drag = { id: hit, sx: p.x, sy: p.y, ex: el.x, ey: el.y };
+  screen.setPointerCapture(ev.pointerId);
+  ev.preventDefault();
+});
+screen.addEventListener("pointermove", (ev) => {
+  const p = toDevice(ev);
+  if (!drag) { stage.style.cursor = Object.values(boxes).some((b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) ? "move" : "default"; return; }
+  const el = findEl(drag.id);
+  el.x = clamp(Math.round(drag.ex + p.x - drag.sx), -80, W + 80);
+  el.y = clamp(Math.round(drag.ey + p.y - drag.sy), -80, H + 80);
+  render(); syncXY();
+});
+const endDrag = () => { if (drag) { drag = null; save(); } };
+screen.addEventListener("pointerup", endDrag);
+screen.addEventListener("pointercancel", endDrag);
+screen.addEventListener("keydown", (ev) => {
+  const el = findEl(selected); if (!el || !boxes[selected]) return;
+  const step = ev.shiftKey ? 10 : 1, k = ev.key;
+  if (k === "ArrowLeft") el.x -= step; else if (k === "ArrowRight") el.x += step;
+  else if (k === "ArrowUp") el.y -= step; else if (k === "ArrowDown") el.y += step; else return;
+  ev.preventDefault(); render(); syncXY(); save();
+});
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+function syncXY() {
+  const el = findEl(selected); if (!el) return;
+  document.querySelectorAll(`[data-xy="${selected}"]`).forEach((inp) => { inp.value = el[inp.dataset.key]; });
+  placeSelection();
+}
+
+/* ------------------------------------------------------------ forms */
+function h(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (k === "class") e.className = v;
+    else if (k === "style") e.setAttribute("style", v);
+    else if (v === true) e.setAttribute(k, "");
+    else if (v !== false && v != null) e.setAttribute(k, v);
+  }
+  for (const k of kids) if (k != null) e.append(k);
+  return e;
+}
+function field(label, input, wide) { return h("label", { class: "field" + (wide ? " wide" : "") }, h("span", {}, label), input); }
+function fieldDiv(label, input, wide) { return h("div", { class: "field" + (wide ? " wide" : "") }, h("span", {}, label), input); }
+function check(label, obj, key, after) {
+  const i = h("input", { type: "checkbox", id: `p-${obj.id || "x"}-${key}`, onchange: () => { obj[key] = i.checked; changed(after); } });
+  i.checked = !!obj[key];
+  return h("label", { class: "check" }, i, label);
+}
+function num(obj, key, min, max, after, xy) {
+  const i = h("input", { type: "number", id: `p-${obj.id}-${key}`, min, max, value: obj[key],
+    oninput: () => { const v = Number(i.value); if (i.value !== "" && Number.isFinite(v)) { obj[key] = clamp(Math.round(v), min, max); changed(after); } } });
+  if (xy) { i.dataset.xy = obj.id; i.dataset.key = key; }
+  return i;
+}
+// Mixes that hold up on this panel: two inks that sit close together, or an ink with
+// white or black. Each is stored as the average of its inks, which patternOf() turns back
+// into exactly that pair.
+const PRESET_MIXES = BOARD.bw
+  ? [["Light gray", 0.25], ["Gray", 0.5], ["Dark gray", 0.75]].map(([name, f]) => ({ name, hex: hexOf(inkRGB("white").map((c, k) => c + (inkRGB("black")[k] - c) * f)) }))
+  : [
+  ["Light blue", "blue", "white"], ["Purple", "blue", "red"], ["Pink", "red", "white"], ["Gold", "yellow", "orange"],
+  ["Olive", "yellow", "green"], ["Brown", "orange", "black"], ["Navy", "blue", "black"], ["Grey", "black", "white"],
+].map(([name, a, b]) => ({ name, hex: hexOf(inkRGB(a).map((c, k) => (c + inkRGB(b)[k]) / 2)) }));
+// A pattern drawn 2x as a CSS background, so a swatch shows the dots the screen will draw.
+const patternCssCache = new Map();
+function patternCss(v) {
+  if (!isMix(v)) return inkCss(v);
+  let css = patternCssCache.get(v);
+  if (!css) {
+    const cv = document.createElement("canvas"); cv.width = cv.height = 8;
+    const cx = cv.getContext("2d"), img = cx.createImageData(8, 8), pat = patternOf(v);
+    for (let i = 0; i < 64; i++) img.data.set([...INKS[pat[i]].rgb, 255], i * 4);
+    cx.putImageData(img, 0, 0);
+    css = `url(${cv.toDataURL()}) 0 0 / 16px 16px`;
+    patternCssCache.set(v, css);
+  }
+  return css;
+}
+// The seven ink swatches, then a row of preset mixes. A mixed color from an older project
+// that isn't a preset stays as it is until another swatch is picked.
+function inkPicker(obj, key, after, idBase) {
+  const base = `${idBase || "p-" + (obj.id || "x")}-${key}`;
+  const swatch = (id, name, value) => h("button", { type: "button", id: `${base}-${id}`, title: name, "aria-label": name,
+    "aria-pressed": String(obj[key] === value), style: `background:${patternCss(value)}`,
+    onclick: (ev) => { obj[key] = value; ev.currentTarget.closest(".picker").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === ev.currentTarget))); changed(after || "list"); } });
+  return h("div", { class: "picker" },
+    h("div", { class: "inks", role: "group", "aria-label": "Inks" }, ...INKS.map((ink) => swatch(ink.id, ink.name, ink.id))),
+    h("div", { class: "inks mixes", role: "group", "aria-label": "Mixed colors" },
+      ...PRESET_MIXES.map((m) => swatch("mix-" + m.name.toLowerCase().replace(/ /g, "-"), `${m.name} (mixed dots)`, m.hex))));
+}
+function text(obj, key, after) { const i = h("input", { type: "text", id: `p-${obj.id}-${key}`, value: obj[key] || "", oninput: () => { obj[key] = i.value; changed(after); } }); return i; }
+function fontFields(el) {
+  const fam = h("select", { id: `p-${el.id}-family`, onchange: () => { el.font.family = fam.value; changed(); } });
+  for (const f of FAMILIES) { const o = h("option", { value: f.id }, f.label); if (f.id === el.font.family) o.selected = true; fam.append(o); }
+  const size = h("input", { type: "number", id: `p-${el.id}-size`, min: 8, max: 160, value: el.font.size,
+    oninput: () => { const v = Number(size.value); if (v >= 8 && v <= 160) { el.font.size = Math.round(v); changed(); } } });
+  const bold = h("input", { type: "checkbox", id: `p-${el.id}-bold`, onchange: () => { el.font.weight = bold.checked ? 700 : 400; changed(); } });
+  bold.checked = el.font.weight >= 700;
+  return [field("Font", fam), field("Size (px)", size), h("label", { class: "check" }, bold, "Bold")];
+}
+function alignField(el) {
+  const s = h("select", { id: `p-${el.id}-align`, onchange: () => {
+    const b = boxes[el.id];
+    if (b) el.x = Math.round(b.x + ANCHOR[s.value] * b.w);
+    el.align = s.value; changed("xy");
+  } });
+  for (const v of ["left", "center", "right"]) { const o = h("option", { value: v }, v[0].toUpperCase() + v.slice(1)); if (el.align === v) o.selected = true; s.append(o); }
+  return field("Align to x", s);
+}
+const TOKENS = {
+  date: ["weekday", "wkd", "month", "mon", "day", "dd", "mm", "year"],
+  temp: ["temp", "unit", "feels", "hi", "lo", "desc", "main", "humidity", "wind", "city"],
+  updated: ["time"],
+  battery: ["volts"],
+};
+function buildProps(container, el) {
+  container.innerHTML = "";
+  if (!el) { container.append(h("p", { class: "note" }, "Click an item on the screen or in the list above.")); return; }
+  const f = h("div", { class: "fields" });
+  if (el.id !== "overlay") f.append(field("Name", text(el, "name", "list")));
+  f.append(field("x", num(el, "x", -80, W + 80, null, true)), field("y", num(el, "y", -80, H + 80, null, true)));
+  if (el.type === "wifi") {
+    f.append(field("Size (px)", num(el, "size", 8, 64)), fieldDiv("Ink when connected", inkPicker(el, "color"), true), fieldDiv("Ink when there's no WiFi", inkPicker(el, "offColor"), true),
+      h("p", { class: "note wide" }, "Shows whether the last connection worked (the device goes online after a redraw when weather or the schedule is due). Switch it in Weather → Preview values."));
+    container.append(f); return;
+  }
+  if (el.type !== "schedule") f.append(alignField(el));
+  f.append(...fontFields(el));
+  f.append(fieldDiv(el.type === "schedule" ? "Entry text ink" : "Ink", inkPicker(el, "color"), true));
+  const tok = (list) => h("div", { class: "tokens field wide" }, "Fill-ins: ", ...list.flatMap((t) => [h("code", {}, `{${t}}`), " "]));
+  switch (el.type) {
+    case "text": f.append(field("Text", text(el, "text"), true)); break;
+    case "date": case "temp": case "battery": f.append(field("Format", text(el, "format"), true), tok(TOKENS[el.type])); break;
+    case "updated": f.append(field("Format", text(el, "format"), true), field("Before the first update", text(el, "pending"), true), tok(TOKENS.updated)); break;
+    case "schedule":
+      f.append(fieldDiv("Time ink", inkPicker(el, "timeColor"), true), fieldDiv("Current entry ink", inkPicker(el, "highlightColor"), true),
+        field("Rows shown", num(el, "rows", 1, 14)), field("Space between rows", num(el, "rowGap", 0, 60)),
+        field("Width", num(el, "width", 40, W)), field("Time starts at (px from left)", num(el, "daysWidth", 0, W)),
+        field("Text starts at (px from left)", num(el, "timeWidth", 0, W)),
+        check("Highlight entries happening now", el, "highlight"),
+        check("Panel behind list", el, "box"), field("Panel padding", num(el, "boxPad", 0, 40)),
+        fieldDiv("Panel ink", inkPicker(el, "boxColor"), true));
+      break;
+  }
+  container.append(f);
+  if (el.type === "text") container.append(h("div", { class: "toolbar" }, h("button", { class: "btn small danger", onclick: () => {
+    S.elements = S.elements.filter((e) => e !== el); selected = null; changed("all"); } }, "Delete this label")));
+}
+function changed(what) {
+  render(); save();
+  if (what === "list" || what === "all") renderLists();
+  if (what === "all") renderProps();
+  if (what === "xy") syncXY();
+}
+function select(id) {
+  selected = id;
+  if (id === "overlay") { if (view !== "gallery") setView("gallery"); }
+  else if (view !== "main" && !playState) setView("main");
+  renderLists(); renderProps(); render();
+}
+function renderProps() {
+  const el = findEl(selected);
+  $("#props-title").textContent = el && el.id !== "overlay" ? el.name : "Selected item";
+  buildProps($("#props"), el && el.id !== "overlay" ? el : null);
+  buildProps($("#overlay-props"), S.gallery.overlay);
+  const ov = $("#overlay-props");
+  ov.prepend(check("Show the clock over photos", S.gallery.overlay, "visible", "cycle"));
+  ov.style.display = "grid"; ov.style.gap = "10px";
+  renderSchedColors();
+  renderWeatherColors();
+}
+function showTimeStyle() {
+  const w = S.time.style === "words";
+  $("#words-box").hidden = !w; $("#time-box").hidden = w;
+}
+function renderParts() {
+  const list = $("#parts-list"); list.innerHTML = "";
+  (S.time.parts || []).forEach((p, i) => {
+    const t = h("input", { type: "time", id: `tp-t-${i}`, value: p.start, "aria-label": "Starts at", oninput: () => { p.start = t.value; changed(); } });
+    const x = h("input", { type: "text", id: `tp-x-${i}`, class: "what", value: p.text, "aria-label": "Name", oninput: () => { p.text = x.value; changed(); } });
+    const del = h("button", { class: "btn small", "aria-label": `Remove ${p.text}`, onclick: () => { S.time.parts.splice(i, 1); renderParts(); changed(); } }, "✕");
+    list.append(h("div", { class: "sched-row" }, h("span", { class: "to" }, "from"), t, x, del));
+  });
+}
+function renderWeatherColors() {
+  const box = $("#weather-colors"); box.innerHTML = "";
+  const els = S.elements.filter((e) => e.type === "temp");
+  if (!els.length) { box.append(h("p", { class: "note" }, "There's no weather reading on the screen.")); return; }
+  box.append(h("div", { class: "fields" }, ...els.map((el) => fieldDiv(el.name, inkPicker(el, "color", "list", `wc-${el.id}`), true))));
+  box.append(h("p", { class: "note" }, "Font, size and position are under Layout, by clicking the reading on the screen."));
+}
+function renderSchedColors() {
+  const box = $("#sched-colors"); box.innerHTML = "";
+  const el = S.elements.find((e) => e.type === "schedule");
+  if (!el) { box.append(h("p", { class: "note" }, "There's no schedule on the screen.")); return; }
+  const pick = (label, key) => fieldDiv(label, inkPicker(el, key, "all", `sc-${key}`), true);
+  box.append(h("div", { class: "fields" },
+    pick("Entry text", "color"), pick("Days and times", "timeColor"), pick("Happening now", "highlightColor"),
+    check("Show a panel behind the schedule", el, "box", "all"), el.box ? pick("Panel", "boxColor") : null));
+  box.append(h("p", { class: "note" }, "With the panel off, the schedule sits directly on the screen's background ink or image (Layout → Background). Font, size and position are under Layout → Schedule."));
+}
+
+/* ------------------------------------------------------------ lists */
+function renderLists() {
+  const list = $("#el-list"); list.innerHTML = "";
+  for (const el of S.elements) {
+    const vis = h("input", { type: "checkbox", id: `vis-${el.id}`, "aria-label": `Show ${el.name}`, onclick: (e) => e.stopPropagation(), onchange: () => { el.visible = vis.checked; changed(); } });
+    vis.checked = el.visible;
+    list.append(h("div", { class: "el-row", "aria-current": String(el.id === selected), tabindex: 0,
+      onclick: () => select(el.id), onkeydown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(el.id); } } },
+      vis, h("span", { class: "dot", style: `background:${colorCss(el.color)}` }), h("span", {}, el.name), h("span", { class: "chip" }, TYPE_LABEL[el.type])));
+  }
+  // schedule
+  const sl = $("#sched-list"); sl.innerHTML = "";
+  const FULL = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  S.schedule.entries.forEach((e, i) => {
+    const kind = e.kind || "time";
+    const k = h("select", { id: `se-k-${i}`, "aria-label": "When", onchange: () => {
+      e.kind = k.value;
+      if (e.kind === "range" && !e.end) e.end = minToTime(Math.min(toMin(e.time) + 60, 1439));
+      changed("list"); } },
+      ...[["time", "At"], ["range", "From"], ["allday", "All day"]].map(([v, l]) => { const o = h("option", { value: v }, l); if (v === kind) o.selected = true; return o; }));
+    const t = h("input", { type: "time", id: `se-t-${i}`, value: e.time, "aria-label": kind === "range" ? "Starts" : "Time", oninput: () => { e.time = t.value; changed(); } });
+    const en = h("input", { type: "time", id: `se-e-${i}`, value: e.end || "", "aria-label": "Ends", oninput: () => { e.end = en.value; changed(); } });
+    const x = h("input", { type: "text", id: `se-x-${i}`, class: "what", value: e.text, "aria-label": "What", placeholder: "What", oninput: () => { e.text = x.value; changed(); } });
+    const setDays = (d) => { e.days = d; changed("list"); };
+    const days = h("div", { class: "days", role: "group", "aria-label": "Repeats on" },
+      ...DAY_ABBR.map((a, d) => h("button", { type: "button", "aria-pressed": String(e.days.includes(d)), "aria-label": FULL[d], title: FULL[d],
+        onclick: () => setDays(e.days.includes(d) ? e.days.filter((z) => z !== d) : [...e.days, d].sort()) }, a.slice(0, 2))),
+      h("span", { class: "quick" },
+        h("button", { type: "button", class: "btn small", onclick: () => setDays([0, 1, 2, 3, 4]) }, "Weekdays"),
+        h("button", { type: "button", class: "btn small", onclick: () => setDays([5, 6]) }, "Weekend"),
+        h("button", { type: "button", class: "btn small", onclick: () => setDays([0, 1, 2, 3, 4, 5, 6]) }, "Every day")));
+    const warn = e.days.length ? null : h("span", { class: "status" }, "Pick at least one day or this entry never shows.");
+    sl.append(h("div", { class: "sched-entry" },
+      h("div", { class: "sched-row" }, k, kind !== "allday" ? t : null, kind === "range" ? h("span", { class: "to" }, "to") : null, kind === "range" ? en : null, x),
+      h("div", { class: "days" }, days, h("button", { type: "button", class: "btn small", style: "margin-left:auto", "aria-label": "Move up", disabled: i === 0,
+        onclick: () => { const a = S.schedule.entries; [a[i - 1], a[i]] = [a[i], a[i - 1]]; changed("list"); } }, "↑"),
+        h("button", { type: "button", class: "btn small", "aria-label": "Move down", disabled: i === S.schedule.entries.length - 1,
+        onclick: () => { const a = S.schedule.entries; [a[i + 1], a[i]] = [a[i], a[i + 1]]; changed("list"); } }, "↓"),
+        h("button", { class: "btn small danger", "aria-label": "Remove entry", onclick: () => { S.schedule.entries.splice(i, 1); changed("list"); } }, "Remove")), warn));
+  });
+  syncSource();
+  if (!S.schedule.entries.length) sl.append(h("p", { class: "note" }, "No entries yet. Add one with + Entry."));
+  const sch = S.elements.find((e) => e.type === "schedule"), shown = S.schedule.entries.filter((e) => e.days.length).length;
+  if (sch && shown > sch.rows) sl.append(h("p", { class: "note" }, `The screen shows ${sch.rows} lines, so the last ${shown - sch.rows} entr${shown - sch.rows === 1 ? "y is" : "ies are"} hidden. Raise “Rows shown” under Layout → Schedule or use a smaller font.`));
+  // gallery
+  const th = $("#thumbs"); th.innerHTML = "";
+  S.gallery.images.forEach((im, i) => {
+    const mins = h("input", { type: "number", id: `gs-${im.id}`, min: 1, max: 1440, placeholder: String(S.gallery.defaultMinutes), value: im.minutes ?? "",
+      "aria-label": "Minutes for this photo", oninput: () => { im.minutes = mins.value === "" ? null : clamp(Math.round(Number(mins.value)) || 1, 1, 1440); save(); updateCycle(); } });
+    const show = () => { galleryIndex = i; setView("gallery"); };
+    const move = (d) => { const j = i + d; if (j < 0 || j >= S.gallery.images.length) return; const a = S.gallery.images; [a[i], a[j]] = [a[j], a[i]]; changed("list"); };
+    const cv = h("canvas", { width: W, height: H, "data-src-id": im.id, "aria-label": im.name, role: "img", onclick: show });
+    th.append(h("div", { class: "thumb", "aria-current": String(view === "gallery" && galleryIndex === i) },
+      cv,
+      h("div", { class: "meta" }, h("b", {}, `${i + 1}. ${im.name}`),
+        h("div", { class: "acts" }, h("span", { class: "status" }, "Show for"), mins, h("span", { class: "status" }, "min"),
+          h("button", { class: "btn small", onclick: show }, "Preview"),
+          h("button", { class: "btn small", "aria-label": "Move up", onclick: () => move(-1) }, "↑"),
+          h("button", { class: "btn small", "aria-label": "Move down", onclick: () => move(1) }, "↓"),
+          h("button", { class: "btn small danger", onclick: () => { S.gallery.images.splice(i, 1); galleryIndex = Math.min(galleryIndex, Math.max(0, S.gallery.images.length - 1)); changed("list"); updateCycle(); } }, "Remove")))));
+  });
+  if (!S.gallery.images.length) th.append(h("p", { class: "note" }, "No photos. With no photos the Inkplate stays on the main screen."));
+  drawThumbs();
+  updateCycle();
+}
+function drawThumbs() {
+  document.querySelectorAll("#thumbs canvas").forEach((cv) => {
+    const im = S.gallery.images.find((x) => x.id === cv.dataset.srcId); if (!im) return;
+    const d = dithered(im.src, true); if (!d) return;
+    cv.getContext("2d").drawImage(d.canvas, 0, 0);
+  });
+}
+function photoMinutes(im) { return im.minutes ?? S.gallery.defaultMinutes; }
+const activePhotos = () => (S.gallery.enabled ? S.gallery.images : []);
+function updateCycle() {
+  const n = activePhotos().length;
+  if (!S.gallery.enabled) { $("#cycle-note").textContent = "The slideshow is off, so the schedule screen stays up all the time. Your photos are kept here but left out of the export."; return; }
+  const g = activePhotos().reduce((t, im) => t + photoMinutes(im), 0);
+  const per = S.gallery.overlay.visible ? "Photos with the clock over them refresh every minute." : "Each photo refreshes once and stays until its time is up.";
+  $("#cycle-note").textContent = n
+    ? `One full cycle: schedule screen ${S.timing.mainMinutes} min, then ${n} photo${n > 1 ? "s" : ""} for ${g} min, ${S.timing.mainMinutes + g} min in all. The cycle restarts at midnight. ${per}`
+    : "No photos yet, so the schedule screen stays up all the time.";
+}
+
+/* ------------------------------------------------------------ view + play */
+function setView(v) {
+  view = v;
+  $("#view-main").setAttribute("aria-pressed", String(v === "main"));
+  $("#view-gallery").setAttribute("aria-pressed", String(v === "gallery"));
+  if (v === "gallery" && selected !== "overlay") selected = "overlay";
+  if (v === "main" && selected === "overlay") selected = S.elements[0]?.id || null;
+  updateModeLabel(); renderLists(); renderProps(); render();
+}
+function updateModeLabel() {
+  const scr = currentScreen();
+  $("#mode-label").textContent = scr.kind === "main" ? "Main screen" : `Photo ${scr.index + 1} of ${Math.max(1, S.gallery.images.length)}`;
+}
+$("#view-main").onclick = () => setView("main");
+$("#view-gallery").onclick = () => setView("gallery");
+// Play: one simulated minute per real second.
+function stepPlay() {
+  if (!playState) return;
+  const now = performance.now();
+  if (now >= playState.until) {
+    if (playState.mode === "main") { playState.mode = "gallery"; playState.index = 0; }
+    else playState.index++;
+    if (playState.mode === "gallery" && playState.index >= activePhotos().length) playState.mode = "main";
+    const dur = playState.mode === "main" ? S.timing.mainMinutes : photoMinutes(activePhotos()[playState.index]);
+    playState.start = now; playState.until = now + dur * 1000;
+    if (!reduceMotion) flash = { start: now };
+    render();
+  }
+  const frac = (now - playState.start) / (playState.until - playState.start);
+  $("#progress").style.width = (clamp(frac, 0, 1) * 100) + "%";
+  const left = Math.ceil((playState.until - now) / 1000);
+  const scr = currentScreen();
+  $("#mode-label").textContent = (scr.kind === "main" ? "Main screen" : `Photo ${scr.index + 1} of ${activePhotos().length}`) + ` · ${left} min left`;
+}
+$("#play").onclick = () => {
+  if (playState) { playState = null; flash = null; $("#play").textContent = "▶ Play rotation"; $("#progress").style.width = "0"; updateModeLabel(); render(); return; }
+  if (!S.gallery.enabled) toast("The slideshow is off, so only the schedule screen shows.");
+  else if (!S.gallery.images.length) toast("Add photos in the Gallery tab to see the rotation.");
+  const now = performance.now();
+  playState = { mode: "main", index: 0, start: now, until: now + S.timing.mainMinutes * 1000, t0: now, clock0: Date.now() };
+  $("#play").textContent = "■ Stop";
+  render();
+};
+let lastMinute = -1;
+function tick() {
+  stepPlay();
+  const m = previewTime().getMinutes();
+  if (flash || playState || m !== lastMinute) { lastMinute = m; render(); }
+}
+setInterval(tick, 100);
+
+/* ------------------------------------------------------------ tabs + static fields */
+document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => {
+  document.querySelectorAll(".tabs button").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
+  document.querySelectorAll("section.panel").forEach((p) => { p.hidden = p.dataset.panel !== b.dataset.tab; });
+  if (b.dataset.tab === "gallery") setView("gallery");
+  else if (b.dataset.tab === "layout" || b.dataset.tab === "schedule") setView("main");
+  if (b.dataset.tab === "export") refreshExport();
+  try { localStorage.setItem(BOARD.store + "-tab", b.dataset.tab); } catch (e) {}
+}));
+function bindStatic() {
+  const bind = (sel, get, set, ev = "input") => {
+    const e = $(sel), clone = e.cloneNode(true); e.replaceWith(clone);
+    clone[clone.type === "checkbox" ? "checked" : "value"] = get();
+    clone.addEventListener(ev, () => { set(clone.type === "checkbox" ? clone.checked : clone.value); changed("list"); updateCycle(); });
+  };
+  bind("#g-enabled", () => !!S.gallery.enabled, (v) => S.gallery.enabled = v, "change");
+  bind("#g-default", () => S.gallery.defaultMinutes, (v) => S.gallery.defaultMinutes = clamp(Math.round(Number(v)) || 1, 1, 1440));
+  bind("#g-fit", () => S.gallery.fit, (v) => S.gallery.fit = v, "change");
+  bind("#g-dither", () => S.gallery.dither, (v) => S.gallery.dither = v, "change");
+  bind("#g-boost", () => String(S.gallery.boost), (v) => S.gallery.boost = Number(v), "change");
+  bind("#t-main", () => S.timing.mainMinutes, (v) => S.timing.mainMinutes = clamp(Math.round(Number(v)) || 1, 1, 1440));
+  bind("#t-weather", () => S.timing.weatherMinutes, (v) => S.timing.weatherMinutes = clamp(Math.round(Number(v)) || 10, 5, 240));
+  bind("#h24", () => S.time.hour24, (v) => S.time.hour24 = v, "change");
+  bind("#ampm", () => S.time.ampm, (v) => S.time.ampm = v, "change");
+  bind("#w-zip", () => S.weather.zip, (v) => S.weather.zip = v.trim());
+  bind("#w-country", () => S.weather.country, (v) => S.weather.country = v.trim().toUpperCase());
+  bind("#w-units", () => S.weather.units, (v) => S.weather.units = v, "change");
+  bind("#w-offset", () => S.weather.offsetHours, (v) => S.weather.offsetHours = clamp(Number(v) || 0, -12, 14));
+  bind("#s-temp", () => S.sample.temp, (v) => S.sample.temp = v);
+  bind("#s-desc", () => S.sample.desc, (v) => S.sample.desc = v);
+  bind("#s-hum", () => S.sample.humidity, (v) => S.sample.humidity = v);
+  bind("#s-city", () => S.sample.city, (v) => S.sample.city = v);
+  bind("#s-volts", () => S.sample.volts, (v) => S.sample.volts = v);
+  bind("#s-wifi", () => S.sample.wifi !== false, (v) => S.sample.wifi = v, "change");
+  bind("#t-style", () => S.time.style || "time", (v) => { S.time.style = v; showTimeStyle(); }, "change");
+  showTimeStyle(); renderParts();
+  bind("#t-full", () => S.timing.fullEvery || 20, (v) => S.timing.fullEvery = clamp(Math.round(Number(v)) || 20, 1, 120));
+  bind("#t-update", () => String(updateMinutes()), (v) => S.timing.updateMinutes = Number(v), "change");
+  bind("#s-url", () => S.schedule.url, (v) => S.schedule.url = v.trim());
+  bind("#s-refresh", () => S.schedule.refreshMinutes, (v) => S.schedule.refreshMinutes = clamp(Math.round(Number(v)) || 15, 1, 1440));
+  bind("#s-preview", () => S.schedule.previewText, (v) => S.schedule.previewText = v);
+  $("#src-manual").onclick = () => { S.schedule.source = "manual"; setView("main"); changed("list"); };
+  $("#src-url").onclick = () => { S.schedule.source = "url"; setView("main"); changed("list"); };
+  $("#bg-ink").replaceChildren(inkPicker(S.background, "ink", "list", "bg"));
+  $("#g-fill").replaceChildren(inkPicker(S.gallery, "fill", "list", "gfill"));
+  $("#bg-name").textContent = S.background.image ? S.background.imageName : "No image";
+  const pd = $("#preview-day"); pd.innerHTML = "";
+  pd.append(h("option", { value: "" }, "Right now"), ...["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((n, d) => h("option", { value: String(d) }, n + " at this time")));
+  pd.value = S.previewDay ?? ""; pd.onchange = () => { S.previewDay = pd.value; setView("main"); render(); };
+}
+$("#bg-file").addEventListener("change", async (ev) => {
+  const file = ev.target.files[0]; ev.target.value = "";
+  if (!file) return;
+  try { const im = await fileToImage(file); S.background.image = fitImage(im, "cover", S.background.ink); S.background.imageName = file.name; $("#bg-name").textContent = file.name; changed(); }
+  catch (e) { toast("That file couldn't be read as an image. Try a JPG or PNG."); }
+});
+$("#bg-clear").onclick = () => { S.background.image = null; S.background.imageName = ""; $("#bg-name").textContent = "No image"; changed(); };
+$("#add-part").onclick = () => { S.time.parts.push({ start: "12:00", text: "New time of day" }); renderParts(); changed(); };
+$("#add-text").onclick = () => {
+  const id = "t" + Date.now().toString(36);
+  S.elements.push({ id, type: "text", name: "Text label", x: 300, y: 200, align: "center", font: { family: "sans", size: 32, weight: 400 }, color: "black", visible: true, text: "Hello" });
+  select(id); changed("all");
+};
+let fetchNote = "";
+function syncSource() {
+  const url = S.schedule.source === "url";
+  $("#src-manual").setAttribute("aria-pressed", String(!url));
+  $("#src-url").setAttribute("aria-pressed", String(url));
+  $("#src-url-fields").hidden = !url;
+  $("#sched-entries-card").hidden = url;
+  if (!url) return;
+  const sch = S.elements.find((e) => e.type === "schedule"), n = parseScheduleText(S.schedule.previewText).length;
+  let note = fetchNote;
+  if (!note && !S.schedule.url) note = "Add the web address the Inkplate should read.";
+  else if (!note && sch && n > sch.rows) note = `The preview has ${n} lines and the screen shows ${sch.rows}, so the last ${n - sch.rows} won't show. Raise “Rows shown” under Layout → Schedule or use a smaller font.`;
+  $("#s-fetch-status").textContent = note;
+}
+$("#s-fetch").onclick = async () => {
+  const url = S.schedule.url, say = (t) => { fetchNote = t; syncSource(); };
+  if (!/^https?:\/\//i.test(url)) { say("Enter an address that starts with https:// or http://."); return; }
+  say("Loading...");
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = (await res.text()).slice(0, 4096);
+    S.schedule.previewText = text; $("#s-preview").value = text;
+    fetchNote = "Loaded. The preview now shows what the Inkplate will show.";
+    changed("list");
+  } catch (e) {
+    say("The designer can't read that address from here, since the browser blocks it. Paste the file's text into the preview box instead. The Inkplate reads the address itself.");
+  }
+  setTimeout(() => { fetchNote = ""; syncSource(); }, 10000);
+};
+$("#sched-add").onclick = () => { S.schedule.entries.push({ kind: "time", time: "12:00", text: "New entry", days: [(new Date().getDay() + 6) % 7] }); changed("list"); const last = document.querySelector(`#se-x-${S.schedule.entries.length - 1}`); last?.focus(); last?.select(); };
+$("#sched-sort").onclick = () => { const key = (e) => (e.kind === "allday" ? -1 : toMin(e.time)); S.schedule.entries.sort((a, b) => key(a) - key(b)); changed("list"); };
+async function addPhotos(files) {
+  let added = 0;
+  for (const file of files) {
+    if (!file.type.startsWith("image/")) continue;
+    try {
+      const im = await fileToImage(file);
+      if (sampleIds.size) { S.gallery.images = S.gallery.images.filter((x) => !sampleIds.has(x.id)); sampleIds.clear(); }
+      S.gallery.images.push({ id: "g" + Date.now().toString(36) + added, name: file.name, src: fitImage(im, S.gallery.fit, S.gallery.fill), minutes: null });
+      added++;
+    } catch (e) { toast(`${file.name} couldn't be read as an image.`); }
+  }
+  if (added) { galleryIndex = S.gallery.images.length - added; setView("gallery"); changed("list"); toast(`Added ${added} photo${added > 1 ? "s" : ""}.`); }
+}
+$("#g-files").addEventListener("change", (ev) => { addPhotos([...ev.target.files]); ev.target.value = ""; });
+const drop = $("#drop");
+drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); addPhotos([...e.dataTransfer.files]); });
+
+/* ------------------------------------------------------------ persistence */
+let saveTimer = null;
+function save() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try { localStorage.setItem(BOARD.store + "-project", JSON.stringify({ ...S, sampleIds: [...sampleIds] })); }
+    catch (e) {
+      try { localStorage.setItem(BOARD.store + "-project", JSON.stringify({ ...S, gallery: { ...S.gallery, images: [] }, background: { ...S.background, image: null } })); toast("Photos are too big to keep in this browser. Use Save project to keep them."); }
+      catch (e2) {}
+    }
+  }, 400);
+}
+function merge(base, data) {
+  const out = { ...base, ...data };
+  for (const k of ["background", "time", "gallery", "timing", "weather", "sample", "schedule"]) out[k] = { ...base[k], ...(data[k] || {}) };
+  out.gallery.overlay = { ...base.gallery.overlay, ...((data.gallery || {}).overlay || {}) };
+  if (!Array.isArray(out.elements)) out.elements = base.elements;
+  out.schedule.entries = (out.schedule.entries || []).map((e) => ({ ...e, days: Array.isArray(e.days) ? e.days : [0, 1, 2, 3, 4, 5, 6], kind: e.kind || "time" }));
+  for (const el of out.elements) if (el.type === "schedule" && el.daysWidth == null) { el.daysWidth = 112; el.timeWidth = Math.max(el.timeWidth, 240); }
+  if ((data.v || 1) < 4) {
+    // v4: no schedule heading, one line per entry, email line bottom-left (same changes as the PyPortal designer).
+    out.elements = out.elements.filter((e) => !(e.id === "head" || (e.type === "text" && /^(today|this week)$/i.test((e.text || "").trim()))));
+    if (!out.elements.some((e) => e.id === "email")) out.elements.splice(Math.max(0, out.elements.findIndex((e) => e.type === "updated")), 0, base.elements.find((e) => e.id === "email"));
+    out.v = 4;
+  }
+  if (out.v < 5) {
+    // v5: editable heading above the schedule; nudge an unmoved schedule down to make room.
+    const sc = out.elements.find((e) => e.type === "schedule");
+    if (!out.elements.some((e) => e.id === "heading")) out.elements.splice(Math.max(0, out.elements.indexOf(sc)), 0, base.elements.find((e) => e.id === "heading"));
+    if (sc && sc.y === 172) sc.y = 196;
+    out.v = 5;
+  }
+  if (out.v < 7) {
+    // v7: time of day in words, bigger date. Only touch the clock and date if they're still at the old defaults.
+    const ck = out.elements.find((e) => e.id === "clock"), dt = out.elements.find((e) => e.id === "date");
+    if (ck && ck.font.family === "Orbitron" && ck.font.size === 74 && ck.x === 24 && ck.y === 18) Object.assign(ck, { x: 26, y: 26, font: { family: "sans", size: 44, weight: 700 } });
+    if (dt && dt.font.size === 28 && dt.x === 28 && dt.y === 110) {
+      // The bigger date goes below the weather conditions, and the schedule moves down to make room.
+      Object.assign(dt, { x: 26, y: 120, font: { ...dt.font, size: 40 } });
+      const hd = out.elements.find((e) => e.id === "heading"), sc = out.elements.find((e) => e.type === "schedule");
+      if (hd && hd.y === 158) hd.y = 180;
+      if (sc && sc.y === 196) sc.y = 216;
+    }
+  }
+  if (!Array.isArray(out.time.parts) || !out.time.parts.length) out.time.parts = DEFAULT_PARTS.map((p) => ({ ...p }));
+  if (out.v < 6) {
+    // v6: WiFi status icon bottom row, between the email line and "Updated".
+    if (!out.elements.some((e) => e.type === "wifi")) out.elements.splice(Math.max(0, out.elements.findIndex((e) => e.type === "updated")), 0, { ...base.elements.find((e) => e.id === "wifi") });
+    out.v = 6;
+  }
+  out.v = Math.max(out.v, 7);
+  out.previewDay = "";
+  return out;
+}
+function load() {
+  try {
+    const raw = localStorage.getItem(BOARD.store + "-project");
+    if (raw) { const d = JSON.parse(raw); S = merge(exampleState(), d); sampleIds = new Set(d.sampleIds || []); return; }
+  } catch (e) {}
+  S = exampleState();
+  S.gallery.images = sampleImages();
+  sampleIds = new Set(S.gallery.images.map((i) => i.id));
+}
+
+/* ------------------------------------------------------------ export */
+const enc = new TextEncoder();
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(u8) { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC[(c ^ u8[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function makeZip(files) {
+  const parts = [], central = []; let offset = 0;
+  const d = new Date(), dosTime = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1), dosDate = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+  for (const f of files) {
+    const name = enc.encode(f.name), data = typeof f.data === "string" ? enc.encode(f.data) : f.data, crc = crc32(data);
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(8, 0, true);
+    lh.setUint16(10, dosTime, true); lh.setUint16(12, dosDate, true); lh.setUint32(14, crc, true); lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true);
+    lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+    parts.push(lh, name, data);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true);
+    ch.setUint16(12, dosTime, true); ch.setUint16(14, dosDate, true); ch.setUint32(16, crc, true); ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true);
+    ch.setUint16(28, name.length, true); ch.setUint32(42, offset, true);
+    central.push(ch, name);
+    offset += 30 + name.length + data.length;
+  }
+  const cdSize = central.reduce((t, p) => t + p.byteLength, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true); end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+  return new Blob([...parts, ...central, end], { type: "application/zip" });
+}
+// 600x448 ink numbers, two pixels per byte, high nibble first (what drawImageFile() reads).
+function packInks(inks) {
+  const out = new Uint8Array(W * H / 2);
+  for (let i = 0; i < out.length; i++) out[i] = (inks[i * 2] << 4) | inks[i * 2 + 1];
+  return out;
+}
+const IMG_BYTES = W * H / 2;
+// C string literal: ASCII only, ° becomes the font's code 127.
+function cstr(s) {
+  let out = '"';
+  for (const ch of String(s ?? "")) {
+    if (ch === "°") out += "\\177";
+    else if (ch === '"' || ch === "\\") out += "\\" + ch;
+    else if (ch === "?") out += "\\?";
+    else { const c = ch.charCodeAt(0); out += c >= 32 && c < 127 ? ch : "?"; }
+  }
+  return out + '"';
+}
+function usedFonts() {
+  const list = S.elements.filter((e) => e.visible && e.font).map((e) => e.font);
+  if (activePhotos().length && S.gallery.overlay.visible) list.push(S.gallery.overlay.font);
+  if (!list.length) list.push(S.gallery.overlay.font); // layout.h always names one font
+  const m = new Map(); for (const f of list) m.set(fontKey(f), f); return [...m.values()];
+}
+const ELTYPE = { clock: "EL_CLOCK", date: "EL_DATE", temp: "EL_TEMP", updated: "EL_UPDATED", text: "EL_TEXT", schedule: "EL_SCHEDULE", battery: "EL_BATTERY", wifi: "EL_WIFI" };
+const ALIGN = { left: "AL_LEFT", center: "AL_CENTER", right: "AL_RIGHT" };
+// Color numbers in layout.h: 0-6 are the solid inks (same numbers as INKPLATE_*), mixed
+// colors follow from 7. Each number picks an 8x8 pattern from PATTERNS.
+function colorTable() {
+  const mixes = [];
+  const c = (v) => {
+    if (!isMix(v)) return inkOf(v).c;
+    const k = v.toLowerCase(); let i = mixes.indexOf(k);
+    if (i < 0) { mixes.push(k); i = mixes.length - 1; }
+    return String(INKS.length + i);
+  };
+  const patternsC = () => [...INKS.map((ink) => [ink.id, ink.name]), ...mixes.map((m) => [m, m])]
+    .map(([v, name]) => `    {${[...patternOf(v)].join(",")}}, // ${name}`).join("\n");
+  return { c, patternsC };
+}
+function elementC(e, ink, fallbackFont) {
+  if (e.type === "wifi")
+    // The icon uses: color = connected ink, highlightColor = no-WiFi ink, width = size (bits in WIFI_*_BITS).
+    return `    {EL_WIFI, ${e.x}, ${e.y}, AL_LEFT, &${fontIdent(fallbackFont)}, ${ink(e.color)}, "", "",\n` +
+      `     0, ${ink(e.offColor)}, 0, 0, 0, 0, ${wifiSize(e)}, false, 0, 0, 0, false}, // ${e.name.replace(/[^\x20-\x7e]/g, "?")}`;
+  const sch = e.type === "schedule";
+  const txt = e.type === "text" ? e.text : (e.format ?? "");
+  return `    {${ELTYPE[e.type]}, ${e.x}, ${e.y}, ${ALIGN[e.align || "left"]}, &${fontIdent(e.font)}, ${ink(e.color)}, ${cstr(txt)}, ${cstr(e.pending ?? "")},\n` +
+    `     ${sch ? ink(e.timeColor) : 0}, ${sch ? ink(e.highlightColor) : 0}, ${sch ? e.rows : 0}, ${sch ? rowHeight(e) : 0}, ${sch ? Number(e.daysWidth) : 0}, ${sch ? Number(e.timeWidth) : 0}, ${sch ? e.width : 0}, ` +
+    `${sch && e.box ? "true" : "false"}, ${sch ? ink(e.boxColor) : 0}, ${sch ? Number(e.boxPad) : 0}, ${sch ? boxHeight(e) : 0}, ${sch && e.highlight ? "true" : "false"}}, // ${e.name.replace(/[^\x20-\x7e]/g, "?")}`;
+}
+function layoutH() {
+  const els = S.elements.filter((e) => e.visible);
+  const KIND = { time: "ENTRY_AT", range: "ENTRY_RANGE", allday: "ENTRY_ALL_DAY" };
+  const entries = S.schedule.entries.filter((e) => e.days && e.days.length).map((e) => ({ kind: KIND[e.kind || "time"],
+    start: e.kind === "allday" ? 0 : toMin(e.time), end: e.kind === "range" ? toMin(e.end) : 0, mask: e.days.reduce((m, d) => m | (1 << d), 0), text: e.text }));
+  const photos = activePhotos().map((im, i) => ({ file: `/gallery/photo${String(i + 1).padStart(2, "0")}.bin`, minutes: photoMinutes(im) }));
+  const ov = S.gallery.overlay, ovVisible = !!(ov.visible && photos.length);
+  const ovFont = ovVisible ? ov.font : (usedFonts()[0] || ov.font);
+  const colors = colorTable(), ink = colors.c;
+  const elementsC = els.map((e) => elementC(e, ink, ovFont)).join("\n");
+  const parts = sortedParts();
+  const wifiEl = els.find((e) => e.type === "wifi"), ws = wifiEl ? wifiSize(wifiEl) : 0;
+  const bitsC = (on) => {
+    if (!ws) return "0";
+    const b = wifiBits(ws, on), rows = [];
+    for (let j = 0; j < ws; j++) {
+      const bytes = [];
+      for (let i = 0; i < ws; i += 8) { let v = 0; for (let k = 0; k < 8; k++) if (i + k < ws && b[j * ws + i + k]) v |= 0x80 >> k; bytes.push("0x" + v.toString(16).padStart(2, "0")); }
+      rows.push("    " + bytes.join(","));
+    }
+    return "\n" + rows.join(",\n") + "\n";
+  };
+  const overlayC = elementC({ ...ov, font: ovFont, type: "clock", name: "Clock over photos" }, ink).replace(/,( \/\/.*)$/, ";$1");
+  const bgC = ink(S.background.ink), fillC = ink(S.gallery.fill);
+  return `// Layout made by ${BOARD.name} Designer, ${new Date().toLocaleString()}.
+// Export again from the designer to change it.
+#pragma once
+
+#define HOUR24 ${S.time.hour24 ? "true" : "false"}
+#define SHOW_AMPM ${S.time.ampm ? "true" : "false"}
+// true: the clock shows the time of day in words (DAY_PARTS below) and the screen
+// only redraws when something on it changes.
+#define CLOCK_WORDS ${S.time.style === "words" ? "true" : "false"}
+#define WEATHER_UNITS ${cstr(S.weather.units)}
+static const uint16_t MAIN_MINUTES = ${S.timing.mainMinutes};
+static const uint16_t WEATHER_MINUTES = ${S.timing.weatherMinutes};
+// The screen (and clock) is redrawn every UPDATE_MINUTES, on the hour and every N minutes after.
+static const uint16_t UPDATE_MINUTES = ${updateMinutes()};${BOARD.bw ? `
+// Quick (partial) updates between full refreshes, which clear ghosting.
+static const uint16_t FULL_REFRESH_EVERY = ${clamp(Math.round(Number(S.timing.fullEvery) || 20), 1, 120)};` : ""}
+static const uint8_t BG_INK = ${bgC};
+static const char *const BG_IMAGE = ${S.background.image ? '"/bg.bin"' : "nullptr"};
+static const uint8_t GALLERY_FILL = ${fillC};
+
+// Schedule source: false = the SCHEDULE entries below, true = a text file read from SCHEDULE_URL.
+#define SCHEDULE_FROM_URL ${S.schedule.source === "url" ? "true" : "false"}
+#define SCHEDULE_URL ${cstr(S.schedule.source === "url" ? S.schedule.url : "")}
+static const uint16_t SCHEDULE_REFRESH_MINUTES = ${S.schedule.refreshMinutes || 15};
+
+// Every color is an 8x8 tile of ink numbers, repeated across the screen.
+static const uint8_t PATTERNS[][64] = {
+${colors.patternsC()}
+};
+
+static const Element ELEMENTS[] = {
+${elementsC || "    {EL_TEXT, 0, 0, AL_LEFT, &" + fontIdent(ovFont) + ", 0, \"\", \"\", 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, false},"}
+};
+static const int ELEMENT_COUNT = ${els.length};
+
+static const SchedEntry SCHEDULE[] = {
+${entries.map((e) => `    {${e.kind}, ${e.start}, ${e.end}, 0x${e.mask.toString(16).padStart(2, "0")}, ${cstr(e.text)}},`).join("\n") || "    {ENTRY_AT, 0, 0, 0, \"\"},"}
+};
+static const int SCHEDULE_COUNT = ${entries.length};
+
+static const Photo PHOTOS[] = {
+${photos.map((p) => `    {${cstr(p.file)}, ${p.minutes}},`).join("\n") || "    {\"\", 0},"}
+};
+static const int PHOTO_COUNT = ${photos.length};
+
+// Times of day for CLOCK_WORDS: minutes after midnight it starts, name. Sorted by start.
+static const DayPart DAY_PARTS[] = {
+${parts.map((p) => `    {${p.start}, ${cstr(p.text)}},`).join("\n") || '    {0, ""},'}
+};
+static const int DAY_PART_COUNT = ${parts.length};
+
+// WiFi icon bitmaps (1 bit per pixel, rows of WIFI_ICON_SIZE bits, high bit first).
+static const int WIFI_ICON_SIZE = ${ws};
+static const uint8_t WIFI_ON_BITS[] = {${bitsC(true)}};
+static const uint8_t WIFI_OFF_BITS[] = {${bitsC(false)}};
+
+static const bool OVERLAY_VISIBLE = ${ovVisible ? "true" : "false"};
+static const Element OVERLAY =
+${overlayC}
+`;
+}
+function fontsH(fonts) {
+  return `// Fonts made by ${BOARD.name} Designer from your design.\n#pragma once\n#include "display_types.h"\n\n` + fonts.map((f) => fontToC(raster(f)).text).join("\n");
+}
+function secretsH() {
+  const ssid = $("#x-ssid").value, pass = $("#x-pass").value, key = $("#x-key").value.trim();
+  return `// WiFi and weather settings. Fill in the blanks before uploading.
+#pragma once
+
+#define WIFI_SSID ${cstr(ssid)}
+#define WIFI_PASSWORD ${cstr(pass)}
+// Free key from https://openweathermap.org/api (Current Weather). New keys can take an hour to start working.
+#define OPENWEATHER_KEY ${cstr(key)}
+#define WEATHER_ZIP ${cstr(S.weather.zip)}
+#define WEATHER_COUNTRY ${cstr(S.weather.country || "US")}
+// Used only until the first weather fetch tells the device its time zone.
+#define UTC_OFFSET_FALLBACK_SECONDS (${Math.round((Number(S.weather.offsetHours) || 0) * 3600)})
+`;
+}
+function readme(nFonts, nImages) {
+  const sk = BOARD.sketch;
+  const how = BOARD.bw ? `How updates work: the clock changes with a quick partial update (only the
+pixels that differ, about half a second, no flashing). After every
+${S.timing.fullEvery || 20} quick updates, and whenever the screen switches between the main
+screen and a photo, it does a full refresh to clear ghosting. The board
+sleeps between updates and wakes a little early so each new minute lands on
+time. Weather and internet time are fetched every ${S.timing.weatherMinutes} minutes, right after an
+update, and the screen updates again to show them. Photos use the panel's
+8-gray mode, which only does full refreshes.` : `How updates work: the panel only does full refreshes (about 12-15 seconds,
+with flashing). The board sleeps between updates and wakes a little early so
+each new minute or photo lands on time. It learns how long its refreshes take
+over the first few minutes, so timing tightens up on its own. Weather and
+internet time are fetched every ${S.timing.weatherMinutes} minutes, after a refresh.`;
+  return `${BOARD.name} Display: Arduino sketch + microSD files
+=======================================================
+
+Made with ${BOARD.name} Designer. Exported ${new Date().toLocaleString()}.
+
+1. Arduino IDE setup (once)
+   - File > Preferences > Additional boards manager URLs, add:
+     https://raw.githubusercontent.com/SolderedElectronics/Dasduino-Board-Definitions-for-Arduino-IDE/master/package_Dasduino_Boards_index.json
+   - Tools > Board > Boards Manager: install "Inkplate Boards".
+   - Library Manager: install "InkplateLibrary" (Soldered) and "ArduinoJson" 7.x.
+
+2. Open ${sk}/${sk}.ino. The folder holds:
+     ${(sk + ".ino").padEnd(20)} the program
+     layout.h             your layout, inks, schedule and timing
+     fonts.h              ${nFonts} font${nFonts === 1 ? "" : "s"} made from your design
+     secrets.h            WiFi name/password and OpenWeatherMap key
+     display_types.h      shared definitions
+
+3. Open secrets.h and fill in WIFI_SSID, WIFI_PASSWORD and OPENWEATHER_KEY
+   (free key at https://openweathermap.org/api, Current Weather Data).
+
+4. Tools > Board > Inkplate Boards > ${BOARD.board}, then Upload.
+   If the upload stops with "serial data stream stopped", set
+   Tools > Upload Speed to 115200 and try again.
+
+5. Copy everything inside sdcard/ to the root of a FAT32 microSD card and put
+   it in the Inkplate: ${nImages} picture${nImages === 1 ? "" : "s"} (${W}x${H}, already dithered to ${BOARD.bw ? "8 grays" : "the 7 inks"}).
+   Without the card the gallery is skipped and the main screen stays up.
+
+${how}
+
+The rotation is worked out from the clock: main screen for ${S.timing.mainMinutes} min, then
+each photo for its minutes, starting over at midnight.
+
+Changing the design later: edit it in the designer and export again. Copy the
+new layout.h and fonts.h (and sdcard/ if photos changed), then upload.
+${S.schedule.source === "url" ? `
+Schedule from a web address: the Inkplate reads
+  ${S.schedule.url}
+every ${S.schedule.refreshMinutes} minute${S.schedule.refreshMinutes === 1 ? "" : "s"}, after a screen refresh. Edit that file to change the
+schedule; no new export is needed. The last good copy is kept in flash, so a
+failed read (Serial Monitor shows "Schedule update failed") keeps it on screen.
+` : ""}
+Troubleshooting: open Serial Monitor at 115200 baud to see "WiFi failed",
+weather errors, and how long each refresh took. Press the reset button to
+start fresh.
+`;
+}
+async function buildFiles() {
+  const fonts = usedFonts();
+  if (!fonts.length) fonts.push(S.gallery.overlay.font);
+  const dir = BOARD.sketch + "/";
+  const files = [
+    { name: dir + BOARD.sketch + ".ino", data: $("#fw-ino").textContent.replace(/^\n/, "") },
+    { name: dir + "display_types.h", data: $("#fw-types").textContent.replace(/^\n/, "") },
+    { name: dir + "layout.h", data: layoutH() },
+    { name: dir + "fonts.h", data: fontsH(fonts) },
+    { name: dir + "secrets.h", data: secretsH() },
+  ];
+  let nImages = 0;
+  if (S.background.image) { files.push({ name: "sdcard/bg.bin", data: packInks(await ditheredNow(S.background.image, false)) }); nImages++; }
+  for (const [i, im] of activePhotos().entries()) { files.push({ name: `sdcard/gallery/photo${String(i + 1).padStart(2, "0")}.bin`, data: packInks(await ditheredNow(im.src, true)) }); nImages++; }
+  files.push({ name: "README.txt", data: readme(fonts.length, nImages) });
+  return files;
+}
+const APP_SPACE = 1.25 * 1024 * 1024; // room for fonts in the default app partition, roughly
+const kb = (n) => n >= 1048576 ? (n / 1048576).toFixed(2) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
+function refreshExport() {
+  const fonts = usedFonts();
+  const sk = BOARD.sketch;
+  const rows = [[`${sk}/${sk}.ino`, $("#fw-ino").textContent.length], [`${sk}/layout.h`, layoutH().length]];
+  let fontBytes = 0;
+  for (const f of fonts) fontBytes += fontToC(raster(f)).size;
+  rows.push([`${sk}/fonts.h (${fonts.length} font${fonts.length === 1 ? "" : "s"})`, fontsH(fonts).length]);
+  if (S.background.image) rows.push(["sdcard/bg.bin", IMG_BYTES]);
+  activePhotos().forEach((im, i) => rows.push([`sdcard/gallery/photo${String(i + 1).padStart(2, "0")}.bin`, IMG_BYTES]));
+  $("#file-list").textContent = rows.map(([n, s]) => n.padEnd(44) + kb(s).padStart(9)).join("\n");
+  const pct = fontBytes / APP_SPACE;
+  $("#flash-label").textContent = `Fonts take about ${kb(fontBytes)} of program space (${Math.round(pct * 100)}% of what's free)` + (pct > 1 ? ". That's too much: use fewer or smaller fonts." : ". Photos live on the microSD card, so they don't count.");
+  $("#flash-bar").style.width = Math.min(100, pct * 100) + "%";
+  $("#flash-bar").style.background = pct > 1 ? "var(--danger)" : "var(--accent)";
+}
+let downloadsCap;
+async function offerFile(filename, data, mime) {
+  if (window.claude && typeof window.claude.use === "function") {
+    if (downloadsCap === undefined) { try { downloadsCap = await window.claude.use("downloads"); } catch (e) { downloadsCap = null; } }
+    if (downloadsCap) {
+      try { await downloadsCap.save({ filename, data }); return "saved"; }
+      catch (e) { if (e && e.code === "declined") return "declined"; if (e && e.code === "rate_limited") return "busy"; }
+    }
+  }
+  const blob = data instanceof Blob ? data : new Blob([data], { type: mime });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename;
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  return "saved";
+}
+$("#export").onclick = async () => {
+  const btn = $("#export"), st = $("#export-status");
+  btn.disabled = true; st.textContent = "Building fonts and dithering photos…";
+  try {
+    const files = await buildFiles();
+    const zip = makeZip(files);
+    st.textContent = `${files.length} files, ${kb(zip.size)}`;
+    const r = await offerFile(BOARD.zip, zip, "application/zip");
+    if (r === "declined") st.textContent = "Download cancelled.";
+    else if (r === "busy") st.textContent = "Another download is waiting for your OK. Try again in a moment.";
+    else toast("Exported " + BOARD.zip);
+  } catch (e) { st.textContent = "Export failed: " + (e.message || e); }
+  btn.disabled = false;
+};
+$("#save-proj").onclick = async () => {
+  const r = await offerFile("inkplate-project.json", JSON.stringify({ ...S, sampleIds: [...sampleIds] }), "application/json");
+  if (r === "saved") toast("Saved inkplate-project.json");
+};
+$("#open-proj").addEventListener("change", async (ev) => {
+  const file = ev.target.files[0]; ev.target.value = "";
+  if (!file) return;
+  try {
+    const d = JSON.parse(await file.text());
+    if (!d || !Array.isArray(d.elements)) throw new Error("not a project");
+    S = merge(exampleState(), d); sampleIds = new Set(d.sampleIds || []);
+    selected = S.elements[0]?.id; bindStatic(); setView("main"); save(); toast("Project opened.");
+  } catch (e) { toast(`That file isn't an ${BOARD.name} Designer project.`); }
+});
+// Brings a PyPortal Display Designer project (320x240, RGB colors, seconds) over to this screen.
+function hexToInk(hex) {
+  const n = parseInt(String(hex || "#000000").slice(1), 16);
+  return INKS[nearestInk(n >> 16 & 255, n >> 8 & 255, n & 255)].id;
+}
+function urlToImage(url) {
+  return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = url; });
+}
+async function importPyPortal(d) {
+  const sx = W / 320, sy = H / 240, sf = (sx + sy) / 2, base = exampleState();
+  const X = (v) => Math.round(Number(v || 0) * sx), Y = (v) => Math.round(Number(v || 0) * sy), F = (v) => Math.round(Number(v || 0) * sf);
+  const conv = (e) => {
+    const o = { ...e, x: X(e.x), y: Y(e.y), font: { ...e.font, size: clamp(F(e.font.size), 8, 160) }, color: hexToInk(e.color) };
+    delete o.seconds;
+    if (e.type === "schedule") Object.assign(o, { timeColor: hexToInk(e.timeColor), highlightColor: hexToInk(e.highlightColor), boxColor: hexToInk(e.boxColor),
+      rowGap: Y(e.rowGap), daysWidth: X(e.daysWidth ?? 60), timeWidth: X(e.timeWidth), width: X(e.width), boxPad: F(e.boxPad) });
+    return o;
+  };
+  const elements = (d.elements || []).filter((e) => TYPE_LABEL[e.type]).map(conv);
+  if (!elements.some((e) => e.type === "battery")) elements.push(base.elements.find((e) => e.type === "battery"));
+  const secsToMin = (v) => clamp(Math.round(Number(v || 60) / 60), 1, 1440);
+  const g = d.gallery || {}, images = [];
+  for (const [i, im] of (g.images || []).entries()) {
+    if (!im.data) continue;
+    try { images.push({ id: "p" + Date.now().toString(36) + i, name: im.name || `Photo ${i + 1}`, src: fitImage(await urlToImage(im.data), "cover", "white"), minutes: im.seconds == null ? null : secsToMin(im.seconds) }); }
+    catch (e) {}
+  }
+  let bgImage = null;
+  if (d.background && d.background.image) { try { bgImage = fitImage(await urlToImage(d.background.image), "cover", "white"); } catch (e) {} }
+  const ov = g.overlay || base.gallery.overlay;
+  return merge(base, {
+    v: Math.max(4, d.v || 1),
+    background: { ink: hexToInk((d.background || {}).color), image: bgImage, imageName: bgImage ? (d.background.imageName || "background") : "" },
+    time: d.time || base.time,
+    elements,
+    schedule: d.schedule || base.schedule,
+    gallery: { ...base.gallery, enabled: g.enabled !== false, images, fit: g.fit || "cover", fill: hexToInk(g.fill),
+      defaultMinutes: secsToMin(g.defaultSeconds), overlay: { ...conv({ ...base.gallery.overlay, ...ov }), id: "overlay", type: "clock", name: "Clock over photos" } },
+    timing: { mainMinutes: secsToMin((d.timing || {}).scheduleSeconds), weatherMinutes: (d.timing || {}).weatherMinutes || base.timing.weatherMinutes },
+    weather: { ...base.weather, ...(d.weather || {}) },
+    sample: { ...base.sample, ...(d.sample || {}) },
+  });
+}
+$("#import-pp").addEventListener("change", async (ev) => {
+  const file = ev.target.files[0]; ev.target.value = "";
+  if (!file) return;
+  try {
+    const d = JSON.parse(await file.text());
+    if (!d || !Array.isArray(d.elements)) throw new Error("not a project");
+    if (d.elements.some((e) => typeof e.color === "string" && !e.color.startsWith("#"))) throw new Error("already an Inkplate project");
+    S = await importPyPortal(d); sampleIds = new Set();
+    selected = S.elements[0]?.id; bindStatic(); setView("main"); save(); refreshExport();
+    toast(`Imported ${file.name}. Colors were matched to the nearest ink; check them under Layout.`);
+  } catch (e) { toast(e.message === "already an Inkplate project" ? "That's an Inkplate project. Use Open project instead." : "That file isn't a PyPortal Display Designer project."); }
+});
+$("#reset").onclick = () => { $("#reset-confirm").hidden = false; };
+$("#reset-no").onclick = () => { $("#reset-confirm").hidden = true; };
+$("#reset-yes").onclick = () => {
+  $("#reset-confirm").hidden = true;
+  S = exampleState(); S.gallery.images = sampleImages(); sampleIds = new Set(S.gallery.images.map((i) => i.id));
+  selected = "clock"; bindStatic(); setView("main"); save(); refreshExport(); toast("Started over with the example.");
+};
+let toastTimer;
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 3200); }
+
+/* ------------------------------------------------------------ boot */
+load();
+bindStatic();
+let startTab = "layout";
+try { startTab = localStorage.getItem(BOARD.store + "-tab") || "layout"; } catch (e) {}
+renderLists(); renderProps(); render();
+(document.querySelector(`.tabs button[data-tab="${startTab}"]`) || document.querySelector(".tabs button")).click();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { rasterCache.clear(); render(); });
+</script>

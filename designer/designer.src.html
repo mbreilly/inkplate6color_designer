@@ -133,8 +133,8 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
 
 <div class="wrap">
   <header class="top">
-    <h1>Inkplate 6COLOR Designer</h1>
-    <p>Arrange the 600×448 seven-ink screen, then export an Arduino sketch and a microSD folder.</p>
+    <h1 id="app-title">Inkplate 6COLOR Designer</h1>
+    <p id="app-sub">Arrange the 600×448 seven-ink screen, then export an Arduino sketch and a microSD folder.</p>
   </header>
 
   <div class="grid">
@@ -154,11 +154,11 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
         </div>
         <div class="device-foot">
           <span id="mode-label">Main screen</span>
-          <span>600 × 448 · 7 inks</span>
+          <span id="screen-size">600 × 448 · 7 inks</span>
         </div>
       </div>
       <div class="bar" aria-hidden="true"><i id="progress"></i></div>
-      <p class="status" style="margin:0">The preview uses the same bitmap fonts and the same seven inks the Inkplate will. Photos are dithered to those inks, and the square mixed-color swatches are drawn as fine patterns of them, exactly as the screen will. Play rotation runs one minute per second and shows the full-screen refresh flash at each change.</p>
+      <p class="status" id="preview-note" style="margin:0">The preview uses the same bitmap fonts and the same seven inks the Inkplate will. Photos are dithered to those inks, and the square mixed-color swatches are drawn as fine patterns of them, exactly as the screen will. Play rotation runs one minute per second and shows the full-screen refresh flash at each change.</p>
     </div>
 
     <div class="right">
@@ -239,12 +239,12 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
             <label class="field"><span>Color boost</span><select id="g-boost"><option value="1">Off</option><option value="1.25">Some</option><option value="1.5">More</option><option value="1.8">Lots</option></select></label>
             <div class="field wide"><span>Padding ink (for “Fit inside”)</span><div id="g-fill"></div></div>
           </div>
-          <div class="drop" id="drop">Drop photos here or <label class="btn small">choose files<input type="file" id="g-files" accept="image/*" multiple hidden></label><br><span class="status">Each photo is resized to 600×448 and dithered to the seven inks. Dithering and boost apply to every photo and can be changed any time.</span></div>
+          <div class="drop" id="drop">Drop photos here or <label class="btn small">choose files<input type="file" id="g-files" accept="image/*" multiple hidden></label><br><span class="status" id="drop-note">Each photo is resized to 600×448 and dithered to the seven inks. Dithering and boost apply to every photo and can be changed any time.</span></div>
           <div class="thumbs" id="thumbs"></div>
         </div>
         <div class="card">
           <h2>Clock over photos</h2>
-          <p class="note">With the clock on, photos redraw every minute so the time stays right, which means a refresh flash each minute. Turn it off and each photo stays put, untouched, until its time is up.</p>
+          <p class="note" id="overlay-note">With the clock on, photos redraw every minute so the time stays right, which means a refresh flash each minute. Turn it off and each photo stays put, untouched, until its time is up.</p>
           <div id="overlay-props"></div>
         </div>
       </section>
@@ -275,7 +275,8 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
           <div class="fields">
             <label class="field"><span>Redraw the clock every</span><select id="t-update"><option value="1">1 minute</option><option value="2">2 minutes</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option></select></label>
           </div>
-          <p class="note">The 6COLOR panel can only redraw the whole screen: each update is a full refresh of about 12–15 seconds with flashing, even when only the time changed. Redrawing less often means less flashing and longer battery life. The clock then changes on the hour and every N minutes after (with 5 minutes: 10:00, 10:05, 10:10…), and the device wakes early so each change shows up on time. Weather and schedule changes show at the next redraw.</p>
+          <div class="fields" id="full-box" hidden><label class="field"><span>Full refresh after this many quick updates</span><input type="number" id="t-full" min="1" max="120"></label></div>
+          <p class="note" id="update-note">The 6COLOR panel can only redraw the whole screen: each update is a full refresh of about 12–15 seconds with flashing, even when only the time changed. Redrawing less often means less flashing and longer battery life. The clock then changes on the hour and every N minutes after (with 5 minutes: 10:00, 10:05, 10:10…), and the device wakes early so each change shows up on time. Weather and schedule changes show at the next redraw.</p>
           </div>
         </div>
         <div class="card">
@@ -321,7 +322,7 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
           <div class="meter"><span class="status" id="flash-label"></span><div class="bar"><i id="flash-bar"></i></div></div>
           <pre class="files" id="file-list"></pre>
           <div class="toolbar"><button class="btn primary" id="export">Export .zip</button><span class="status" id="export-status"></span></div>
-          <p class="note">Open <code>InkplateDisplay/InkplateDisplay.ino</code> in the Arduino IDE and upload it. Copy the contents of <code>sdcard/</code> to a FAT32 microSD card. README.txt in the zip has the steps.</p>
+          <p class="note">Open <code><span class="sk">InkplateDisplay</span>/<span class="sk">InkplateDisplay</span>.ino</code> in the Arduino IDE and upload it. Copy the contents of <code>sdcard/</code> to a FAT32 microSD card. README.txt in the zip has the steps.</p>
         </div>
         <div class="card">
           <h2>Project</h2>
@@ -348,7 +349,9 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
 </script>
 <script>
 "use strict";
-const W = 600, H = 448;
+// Which board this designer is for; tools/build_designer.py fills it in.
+const BOARD = @@BOARD@@;
+const W = BOARD.W, H = BOARD.H;
 const $ = (s) => document.querySelector(s);
 const FAMILIES = [
   { id: "sans", label: "Sans (Arial)", css: "Arial, Helvetica, sans-serif" },
@@ -366,7 +369,10 @@ const FAMILIES = [
 ];
 // The panel's seven inks, numbered as the Inkplate library numbers them.
 // The RGB values approximate how each ink looks on the panel; photos are dithered against them.
-const INKS = [
+const INKS = BOARD.bw ? [
+  { id: "black", n: 0, name: "Black", c: "INK_BLACK", rgb: [28, 28, 32] },
+  { id: "white", n: 1, name: "White", c: "INK_WHITE", rgb: [236, 235, 227] },
+] : [
   { id: "black", n: 0, name: "Black", c: "INKPLATE_BLACK", rgb: [28, 28, 32] },
   { id: "white", n: 1, name: "White", c: "INKPLATE_WHITE", rgb: [236, 235, 227] },
   { id: "green", n: 2, name: "Green", c: "INKPLATE_GREEN", rgb: [46, 112, 66] },
@@ -375,6 +381,9 @@ const INKS = [
   { id: "yellow", n: 5, name: "Yellow", c: "INKPLATE_YELLOW", rgb: [228, 202, 62] },
   { id: "orange", n: 6, name: "Orange", c: "INKPLATE_ORANGE", rgb: [204, 106, 50] },
 ];
+// Photos: the black-and-white board shows them in its 8-gray mode (0 = black ... 7 = white).
+const PHOTO_INKS = BOARD.bw ? Array.from({ length: 8 }, (_, i) => ({ id: "gray" + i, n: i, name: "Gray " + i,
+  rgb: [0, 1, 2].map((q) => Math.round(INKS[0].rgb[q] + (INKS[1].rgb[q] - INKS[0].rgb[q]) * i / 7)) })) : INKS;
 const inkOf = (id) => INKS.find((i) => i.id === id) || INKS[0];
 const inkRGB = (id) => inkOf(id).rgb;
 const inkCss = (id) => `rgb(${inkRGB(id).join(",")})`;
@@ -480,11 +489,34 @@ function exampleState() {
     ] },
     gallery: { enabled: true, images: [], defaultMinutes: 2, fit: "cover", fill: "white", dither: "fs", boost: 1.25,
       overlay: { id: "overlay", type: "clock", name: "Clock over photos", x: 576, y: 384, align: "right", font: { family: "sans", size: 40, weight: 700 }, color: "white", visible: true } },
-    timing: { mainMinutes: 10, weatherMinutes: 10, updateMinutes: 5 },
+    timing: { mainMinutes: 10, weatherMinutes: 10, updateMinutes: 5, fullEvery: 20 },
     weather: { zip: "19104", country: "US", units: "imperial", offsetHours: -4 },
     sample: { temp: 68, desc: "Partly cloudy", humidity: 54, city: "Philadelphia", volts: 4.05, wifi: true },
   };
 }
+// The black-and-white board: 800x600, so the example layout is scaled up and the inks become black.
+function bwExample(st) {
+  const kx = W / 600, ky = H / 448, kf = 4 / 3, bwInk = (v) => (v === "white" ? "white" : "black");
+  const scaleEl = (e) => {
+    e.x = Math.round(e.x * kx); e.y = Math.round(e.y * ky);
+    if (e.font) e.font = { ...e.font, size: Math.round(e.font.size * kf) };
+    for (const k of ["color", "timeColor", "highlightColor", "boxColor", "offColor"]) if (e[k] != null) e[k] = bwInk(e[k]);
+    for (const k of ["rowGap", "daysWidth", "timeWidth", "width", "boxPad", "size"]) if (e[k] != null) e[k] = Math.round(e[k] * kx);
+  };
+  st.elements.forEach(scaleEl); scaleEl(st.gallery.overlay);
+  const ck = st.elements.find((e) => e.id === "clock"), dt = st.elements.find((e) => e.id === "date");
+  Object.assign(ck, { x: 30, y: 22, font: { family: "Orbitron", size: 96, weight: 700 } });
+  Object.assign(dt, { x: 34, y: 150 });
+  st.elements.find((e) => e.id === "heading").y = 236;
+  st.elements.find((e) => e.id === "sched").y = 284;
+  st.time.style = "time";
+  st.timing.updateMinutes = 1;
+  st.gallery.fill = "white";
+  st.background.ink = "white";
+  st.gallery.overlay.visible = false; // photos can only do full refreshes, so no clock over them by default
+  return st;
+}
+if (BOARD.bw) { const ex = exampleState; exampleState = () => bwExample(ex()); }
 let S = exampleState();
 let selected = "clock";
 let view = "main";
@@ -615,17 +647,17 @@ const rowHeight = (el) => lineH(el) + Number(el.rowGap || 0);
 const boxHeight = (el) => el.rows * rowHeight(el) - Number(el.rowGap || 0);
 
 /* ------------------------------------------------------------ images and dithering */
-function nearestInk(r, g, b) {
+function nearestInk(r, g, b, pal = INKS) {
   let best = 0, bd = Infinity;
-  for (let i = 0; i < INKS.length; i++) {
-    const p = INKS[i].rgb, rm = (r + p[0]) / 2, dr = r - p[0], dg = g - p[1], db = b - p[2];
+  for (let i = 0; i < pal.length; i++) {
+    const p = pal[i].rgb, rm = (r + p[0]) / 2, dr = r - p[0], dg = g - p[1], db = b - p[2];
     const d = (2 + rm / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rm) / 256) * db * db;
     if (d < bd) { bd = d; best = i; }
   }
   return best;
 }
 // Returns ink indexes (0-6) for every pixel of a 600x448 ImageData.
-function ditherToInks(imageData, method, boost) {
+function ditherToInks(imageData, method, boost, pal = INKS) {
   const src = imageData.data, n = W * H, buf = new Float32Array(n * 3), out = new Uint8Array(n);
   for (let i = 0; i < n; i++) {
     let r = src[i * 4], g = src[i * 4 + 1], b = src[i * 4 + 2];
@@ -644,9 +676,9 @@ function ditherToInks(imageData, method, boost) {
     for (let k = 0; k < W; k++) {
       const x = rtl ? W - 1 - k : k, i = y * W + x, j = i * 3;
       const r = Math.max(0, Math.min(255, buf[j])), g = Math.max(0, Math.min(255, buf[j + 1])), b = Math.max(0, Math.min(255, buf[j + 2]));
-      const ink = nearestInk(r, g, b); out[i] = ink;
+      const ink = nearestInk(r, g, b, pal); out[i] = ink;
       if (method === "none") continue;
-      const p = INKS[ink].rgb, er = r - p[0], eg = g - p[1], eb = b - p[2];
+      const p = pal[ink].rgb, er = r - p[0], eg = g - p[1], eb = b - p[2];
       if (method === "fs") {
         const d = rtl ? -1 : 1;
         spread(x + d, y, er, eg, eb, 7 / 16); spread(x - d, y + 1, er, eg, eb, 3 / 16);
@@ -660,25 +692,27 @@ function ditherToInks(imageData, method, boost) {
   }
   return out;
 }
-function inksToImageData(inks) {
+function inksToImageData(inks, pal = INKS) {
   const id = new ImageData(W, H), d = id.data;
-  for (let i = 0; i < inks.length; i++) { const p = INKS[inks[i]].rgb; d[i * 4] = p[0]; d[i * 4 + 1] = p[1]; d[i * 4 + 2] = p[2]; d[i * 4 + 3] = 255; }
+  for (let i = 0; i < inks.length; i++) { const p = pal[inks[i]].rgb; d[i * 4] = p[0]; d[i * 4 + 1] = p[1]; d[i * 4 + 2] = p[2]; d[i * 4 + 3] = 255; }
   return id;
 }
 // Cache of dithered images, keyed by image data + current dither settings.
 const ditherCache = new Map();
-const ditherKey = (src) => `${S.gallery.dither}|${S.gallery.boost}|${src.length}|${src.slice(-40)}`;
+// photo = true: a gallery photo (grays on the black-and-white board); false: the background.
+const palOf = (photo) => photo ? PHOTO_INKS : INKS;
+const ditherKey = (src, photo) => `${photo && BOARD.bw ? "g" : "i"}|${S.gallery.dither}|${S.gallery.boost}|${src.length}|${src.slice(-40)}`;
 const pendingDither = new Set();
-function dithered(src) {
+function dithered(src, photo) {
   if (!src) return null;
-  const key = ditherKey(src);
+  const key = ditherKey(src, photo);
   const c = ditherCache.get(key);
   if (c) return c;
   if (pendingDither.has(key)) return null;
   pendingDither.add(key);
   decodeNow(src).then((imgData) => {
-    const inks = ditherToInks(imgData, S.gallery.dither, Number(S.gallery.boost));
-    const image = inksToImageData(inks);
+    const inks = ditherToInks(imgData, S.gallery.dither, Number(S.gallery.boost), palOf(photo));
+    const image = inksToImageData(inks, palOf(photo));
     const cv = document.createElement("canvas"); cv.width = W; cv.height = H; cv.getContext("2d").putImageData(image, 0, 0);
     ditherCache.set(key, { inks, image, canvas: cv });
     pendingDither.delete(key);
@@ -694,10 +728,10 @@ function decodeNow(url) {
     im.onerror = rej; im.src = url;
   });
 }
-async function ditheredNow(src) {
-  const c = ditherCache.get(ditherKey(src));
+async function ditheredNow(src, photo) {
+  const c = ditherCache.get(ditherKey(src, photo));
   if (c) return c.inks;
-  return ditherToInks(await decodeNow(src), S.gallery.dither, Number(S.gallery.boost));
+  return ditherToInks(await decodeNow(src), S.gallery.dither, Number(S.gallery.boost), palOf(photo));
 }
 // Resizes a picture to 600x448 and keeps it as a JPEG; dithering happens later, so settings can change.
 function fitImage(source, fit, fillInk) {
@@ -738,6 +772,20 @@ function sampleImages() {
 }
 
 /* ------------------------------------------------------------ rendering */
+if (BOARD.bw) {
+  document.title = "Inkplate 6 Designer";
+  const set = (sel, t) => { const e = $(sel); if (e) e.textContent = t; };
+  set("#app-title", "Inkplate 6 Designer");
+  set("#app-sub", "Arrange the 800×600 black-and-white screen, then export an Arduino sketch and a microSD folder.");
+  set("#screen-size", "800 × 600 · black and white");
+  set("#preview-note", "The preview uses the same bitmap fonts the Inkplate will, in black and white. Grays are drawn as fine dot patterns, exactly as the screen will, and photos are shown in the panel's 8 grays. Play rotation runs one minute per second.");
+  set("#drop-note", "Each photo is resized to 800×600 and dithered to the panel's 8 grays. Dithering and boost apply to every photo and can be changed any time.");
+  set("#overlay-note", "Photos use the panel's gray mode, which can only do full refreshes. With the clock on, each photo redraws (with a flash) every time the clock changes. Turn it off and each photo stays put until its time is up.");
+  set("#update-note", "The Inkplate 6 changes just the pixels that differ (a quick update, about half a second, no flashing), so the clock can tick every minute. Quick updates leave faint ghosts over time, so every so often it does one full refresh (about a second, with a flash) to clean the screen. Weather and schedule changes show up right after they're fetched.");
+  $("#full-box").hidden = false;
+}
+document.querySelectorAll(".sk").forEach((e) => { e.textContent = BOARD.sketch; });
+$("#stage").width = W; $("#stage").height = H; $("#screen").style.aspectRatio = `${W} / ${H}`;
 const stage = $("#stage"), sctx = stage.getContext("2d");
 const frame = sctx.createImageData(W, H);
 // pat is a color's 8x8 ink pattern (patternOf), tiled from the screen's top-left like the firmware does.
@@ -889,7 +937,7 @@ function currentScreen() {
   return view === "main" ? { kind: "main" } : { kind: "gallery", index: galleryIndex };
 }
 function previewTime() { return playState ? new Date(playState.clock0 + (performance.now() - playState.t0) * 60) : new Date(); }
-const FLASH_SEQ = ["black", "white", "red", "yellow", "white", "black", "white"];
+const FLASH_SEQ = BOARD.bw ? ["black", "white", "black", "white"] : ["black", "white", "red", "yellow", "white", "black", "white"];
 function render() {
   const buf = frame.data, now = previewNow(previewTime()), scr = currentScreen();
   boxes = {};
@@ -901,7 +949,7 @@ function render() {
   let base = null, src = null;
   if (scr.kind === "main") src = S.background.image;
   else { const im = activePhotos()[scr.index]; src = im ? im.src : null; }
-  if (src) { const d = dithered(src); base = d ? d.image : null; }
+  if (src) { const d = dithered(src, scr.kind !== "main"); base = d ? d.image : null; }
   if (base) buf.set(base.data);
   else fillRect(buf, 0, 0, W, H, patternOf(scr.kind === "main" ? S.background.ink : S.gallery.fill));
   if (scr.kind === "main") {
@@ -999,7 +1047,9 @@ function num(obj, key, min, max, after, xy) {
 // Mixes that hold up on this panel: two inks that sit close together, or an ink with
 // white or black. Each is stored as the average of its inks, which patternOf() turns back
 // into exactly that pair.
-const PRESET_MIXES = [
+const PRESET_MIXES = BOARD.bw
+  ? [["Light gray", 0.25], ["Gray", 0.5], ["Dark gray", 0.75]].map(([name, f]) => ({ name, hex: hexOf(inkRGB("white").map((c, k) => c + (inkRGB("black")[k] - c) * f)) }))
+  : [
   ["Light blue", "blue", "white"], ["Purple", "blue", "red"], ["Pink", "red", "white"], ["Gold", "yellow", "orange"],
   ["Olive", "yellow", "green"], ["Brown", "orange", "black"], ["Navy", "blue", "black"], ["Grey", "black", "white"],
 ].map(([name, a, b]) => ({ name, hex: hexOf(inkRGB(a).map((c, k) => (c + inkRGB(b)[k]) / 2)) }));
@@ -1210,7 +1260,7 @@ function renderLists() {
 function drawThumbs() {
   document.querySelectorAll("#thumbs canvas").forEach((cv) => {
     const im = S.gallery.images.find((x) => x.id === cv.dataset.srcId); if (!im) return;
-    const d = dithered(im.src); if (!d) return;
+    const d = dithered(im.src, true); if (!d) return;
     cv.getContext("2d").drawImage(d.canvas, 0, 0);
   });
 }
@@ -1284,7 +1334,7 @@ document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("cli
   if (b.dataset.tab === "gallery") setView("gallery");
   else if (b.dataset.tab === "layout" || b.dataset.tab === "schedule") setView("main");
   if (b.dataset.tab === "export") refreshExport();
-  try { localStorage.setItem("ip6-tab", b.dataset.tab); } catch (e) {}
+  try { localStorage.setItem(BOARD.store + "-tab", b.dataset.tab); } catch (e) {}
 }));
 function bindStatic() {
   const bind = (sel, get, set, ev = "input") => {
@@ -1313,6 +1363,7 @@ function bindStatic() {
   bind("#s-wifi", () => S.sample.wifi !== false, (v) => S.sample.wifi = v, "change");
   bind("#t-style", () => S.time.style || "time", (v) => { S.time.style = v; showTimeStyle(); }, "change");
   showTimeStyle(); renderParts();
+  bind("#t-full", () => S.timing.fullEvery || 20, (v) => S.timing.fullEvery = clamp(Math.round(Number(v)) || 20, 1, 120));
   bind("#t-update", () => String(updateMinutes()), (v) => S.timing.updateMinutes = Number(v), "change");
   bind("#s-url", () => S.schedule.url, (v) => S.schedule.url = v.trim());
   bind("#s-refresh", () => S.schedule.refreshMinutes, (v) => S.schedule.refreshMinutes = clamp(Math.round(Number(v)) || 15, 1, 1440));
@@ -1395,9 +1446,9 @@ let saveTimer = null;
 function save() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    try { localStorage.setItem("ip6-project", JSON.stringify({ ...S, sampleIds: [...sampleIds] })); }
+    try { localStorage.setItem(BOARD.store + "-project", JSON.stringify({ ...S, sampleIds: [...sampleIds] })); }
     catch (e) {
-      try { localStorage.setItem("ip6-project", JSON.stringify({ ...S, gallery: { ...S.gallery, images: [] }, background: { ...S.background, image: null } })); toast("Photos are too big to keep in this browser. Use Save project to keep them."); }
+      try { localStorage.setItem(BOARD.store + "-project", JSON.stringify({ ...S, gallery: { ...S.gallery, images: [] }, background: { ...S.background, image: null } })); toast("Photos are too big to keep in this browser. Use Save project to keep them."); }
       catch (e2) {}
     }
   }, 400);
@@ -1446,7 +1497,7 @@ function merge(base, data) {
 }
 function load() {
   try {
-    const raw = localStorage.getItem("ip6-project");
+    const raw = localStorage.getItem(BOARD.store + "-project");
     if (raw) { const d = JSON.parse(raw); S = merge(exampleState(), d); sampleIds = new Set(d.sampleIds || []); return; }
   } catch (e) {}
   S = exampleState();
@@ -1555,7 +1606,7 @@ function layoutH() {
   };
   const overlayC = elementC({ ...ov, font: ovFont, type: "clock", name: "Clock over photos" }, ink).replace(/,( \/\/.*)$/, ";$1");
   const bgC = ink(S.background.ink), fillC = ink(S.gallery.fill);
-  return `// Layout made by Inkplate 6COLOR Designer, ${new Date().toLocaleString()}.
+  return `// Layout made by ${BOARD.name} Designer, ${new Date().toLocaleString()}.
 // Export again from the designer to change it.
 #pragma once
 
@@ -1568,7 +1619,9 @@ function layoutH() {
 static const uint16_t MAIN_MINUTES = ${S.timing.mainMinutes};
 static const uint16_t WEATHER_MINUTES = ${S.timing.weatherMinutes};
 // The screen (and clock) is redrawn every UPDATE_MINUTES, on the hour and every N minutes after.
-static const uint16_t UPDATE_MINUTES = ${updateMinutes()};
+static const uint16_t UPDATE_MINUTES = ${updateMinutes()};${BOARD.bw ? `
+// Quick (partial) updates between full refreshes, which clear ghosting.
+static const uint16_t FULL_REFRESH_EVERY = ${clamp(Math.round(Number(S.timing.fullEvery) || 20), 1, 120)};` : ""}
 static const uint8_t BG_INK = ${bgC};
 static const char *const BG_IMAGE = ${S.background.image ? '"/bg.bin"' : "nullptr"};
 static const uint8_t GALLERY_FILL = ${fillC};
@@ -1615,7 +1668,7 @@ ${overlayC}
 `;
 }
 function fontsH(fonts) {
-  return `// Fonts made by Inkplate 6COLOR Designer from your design.\n#pragma once\n#include "display_types.h"\n\n` + fonts.map((f) => fontToC(raster(f)).text).join("\n");
+  return `// Fonts made by ${BOARD.name} Designer from your design.\n#pragma once\n#include "display_types.h"\n\n` + fonts.map((f) => fontToC(raster(f)).text).join("\n");
 }
 function secretsH() {
   const ssid = $("#x-ssid").value, pass = $("#x-pass").value, key = $("#x-key").value.trim();
@@ -1633,10 +1686,23 @@ function secretsH() {
 `;
 }
 function readme(nFonts, nImages) {
-  return `Inkplate 6COLOR Display: Arduino sketch + microSD files
+  const sk = BOARD.sketch;
+  const how = BOARD.bw ? `How updates work: the clock changes with a quick partial update (only the
+pixels that differ, about half a second, no flashing). After every
+${S.timing.fullEvery || 20} quick updates, and whenever the screen switches between the main
+screen and a photo, it does a full refresh to clear ghosting. The board
+sleeps between updates and wakes a little early so each new minute lands on
+time. Weather and internet time are fetched every ${S.timing.weatherMinutes} minutes, right after an
+update, and the screen updates again to show them. Photos use the panel's
+8-gray mode, which only does full refreshes.` : `How updates work: the panel only does full refreshes (about 12-15 seconds,
+with flashing). The board sleeps between updates and wakes a little early so
+each new minute or photo lands on time. It learns how long its refreshes take
+over the first few minutes, so timing tightens up on its own. Weather and
+internet time are fetched every ${S.timing.weatherMinutes} minutes, after a refresh.`;
+  return `${BOARD.name} Display: Arduino sketch + microSD files
 =======================================================
 
-Made with Inkplate 6COLOR Designer. Exported ${new Date().toLocaleString()}.
+Made with ${BOARD.name} Designer. Exported ${new Date().toLocaleString()}.
 
 1. Arduino IDE setup (once)
    - File > Preferences > Additional boards manager URLs, add:
@@ -1644,8 +1710,8 @@ Made with Inkplate 6COLOR Designer. Exported ${new Date().toLocaleString()}.
    - Tools > Board > Boards Manager: install "Inkplate Boards".
    - Library Manager: install "InkplateLibrary" (Soldered) and "ArduinoJson" 7.x.
 
-2. Open InkplateDisplay/InkplateDisplay.ino. The folder holds:
-     InkplateDisplay.ino  the program
+2. Open ${sk}/${sk}.ino. The folder holds:
+     ${(sk + ".ino").padEnd(20)} the program
      layout.h             your layout, inks, schedule and timing
      fonts.h              ${nFonts} font${nFonts === 1 ? "" : "s"} made from your design
      secrets.h            WiFi name/password and OpenWeatherMap key
@@ -1654,17 +1720,15 @@ Made with Inkplate 6COLOR Designer. Exported ${new Date().toLocaleString()}.
 3. Open secrets.h and fill in WIFI_SSID, WIFI_PASSWORD and OPENWEATHER_KEY
    (free key at https://openweathermap.org/api, Current Weather Data).
 
-4. Tools > Board > Inkplate Boards > Soldered Inkplate 6COLOR, then Upload.
+4. Tools > Board > Inkplate Boards > ${BOARD.board}, then Upload.
+   If the upload stops with "serial data stream stopped", set
+   Tools > Upload Speed to 115200 and try again.
 
 5. Copy everything inside sdcard/ to the root of a FAT32 microSD card and put
-   it in the Inkplate: ${nImages} picture${nImages === 1 ? "" : "s"} (600x448, already dithered to the 7 inks).
+   it in the Inkplate: ${nImages} picture${nImages === 1 ? "" : "s"} (${W}x${H}, already dithered to ${BOARD.bw ? "8 grays" : "the 7 inks"}).
    Without the card the gallery is skipped and the main screen stays up.
 
-How updates work: the panel only does full refreshes (about 12-15 seconds,
-with flashing). The board sleeps between updates and wakes a little early so
-each new minute or photo lands on time. It learns how long its refreshes take
-over the first few minutes, so timing tightens up on its own. Weather and
-internet time are fetched every ${S.timing.weatherMinutes} minutes, after a refresh.
+${how}
 
 The rotation is worked out from the clock: main screen for ${S.timing.mainMinutes} min, then
 each photo for its minutes, starting over at midnight.
@@ -1686,17 +1750,17 @@ start fresh.
 async function buildFiles() {
   const fonts = usedFonts();
   if (!fonts.length) fonts.push(S.gallery.overlay.font);
-  const dir = "InkplateDisplay/";
+  const dir = BOARD.sketch + "/";
   const files = [
-    { name: dir + "InkplateDisplay.ino", data: $("#fw-ino").textContent.replace(/^\n/, "") },
+    { name: dir + BOARD.sketch + ".ino", data: $("#fw-ino").textContent.replace(/^\n/, "") },
     { name: dir + "display_types.h", data: $("#fw-types").textContent.replace(/^\n/, "") },
     { name: dir + "layout.h", data: layoutH() },
     { name: dir + "fonts.h", data: fontsH(fonts) },
     { name: dir + "secrets.h", data: secretsH() },
   ];
   let nImages = 0;
-  if (S.background.image) { files.push({ name: "sdcard/bg.bin", data: packInks(await ditheredNow(S.background.image)) }); nImages++; }
-  for (const [i, im] of activePhotos().entries()) { files.push({ name: `sdcard/gallery/photo${String(i + 1).padStart(2, "0")}.bin`, data: packInks(await ditheredNow(im.src)) }); nImages++; }
+  if (S.background.image) { files.push({ name: "sdcard/bg.bin", data: packInks(await ditheredNow(S.background.image, false)) }); nImages++; }
+  for (const [i, im] of activePhotos().entries()) { files.push({ name: `sdcard/gallery/photo${String(i + 1).padStart(2, "0")}.bin`, data: packInks(await ditheredNow(im.src, true)) }); nImages++; }
   files.push({ name: "README.txt", data: readme(fonts.length, nImages) });
   return files;
 }
@@ -1704,10 +1768,11 @@ const APP_SPACE = 1.25 * 1024 * 1024; // room for fonts in the default app parti
 const kb = (n) => n >= 1048576 ? (n / 1048576).toFixed(2) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
 function refreshExport() {
   const fonts = usedFonts();
-  const rows = [["InkplateDisplay/InkplateDisplay.ino", $("#fw-ino").textContent.length], ["InkplateDisplay/layout.h", layoutH().length]];
+  const sk = BOARD.sketch;
+  const rows = [[`${sk}/${sk}.ino`, $("#fw-ino").textContent.length], [`${sk}/layout.h`, layoutH().length]];
   let fontBytes = 0;
   for (const f of fonts) fontBytes += fontToC(raster(f)).size;
-  rows.push([`InkplateDisplay/fonts.h (${fonts.length} font${fonts.length === 1 ? "" : "s"})`, fontsH(fonts).length]);
+  rows.push([`${sk}/fonts.h (${fonts.length} font${fonts.length === 1 ? "" : "s"})`, fontsH(fonts).length]);
   if (S.background.image) rows.push(["sdcard/bg.bin", IMG_BYTES]);
   activePhotos().forEach((im, i) => rows.push([`sdcard/gallery/photo${String(i + 1).padStart(2, "0")}.bin`, IMG_BYTES]));
   $("#file-list").textContent = rows.map(([n, s]) => n.padEnd(44) + kb(s).padStart(9)).join("\n");
@@ -1738,10 +1803,10 @@ $("#export").onclick = async () => {
     const files = await buildFiles();
     const zip = makeZip(files);
     st.textContent = `${files.length} files, ${kb(zip.size)}`;
-    const r = await offerFile("inkplate-display.zip", zip, "application/zip");
+    const r = await offerFile(BOARD.zip, zip, "application/zip");
     if (r === "declined") st.textContent = "Download cancelled.";
     else if (r === "busy") st.textContent = "Another download is waiting for your OK. Try again in a moment.";
-    else toast("Exported inkplate-display.zip");
+    else toast("Exported " + BOARD.zip);
   } catch (e) { st.textContent = "Export failed: " + (e.message || e); }
   btn.disabled = false;
 };
@@ -1757,7 +1822,7 @@ $("#open-proj").addEventListener("change", async (ev) => {
     if (!d || !Array.isArray(d.elements)) throw new Error("not a project");
     S = merge(exampleState(), d); sampleIds = new Set(d.sampleIds || []);
     selected = S.elements[0]?.id; bindStatic(); setView("main"); save(); toast("Project opened.");
-  } catch (e) { toast("That file isn't an Inkplate 6COLOR Designer project."); }
+  } catch (e) { toast(`That file isn't an ${BOARD.name} Designer project.`); }
 });
 // Brings a PyPortal Display Designer project (320x240, RGB colors, seconds) over to this screen.
 function hexToInk(hex) {
@@ -1828,7 +1893,7 @@ function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = fal
 load();
 bindStatic();
 let startTab = "layout";
-try { startTab = localStorage.getItem("ip6-tab") || "layout"; } catch (e) {}
+try { startTab = localStorage.getItem(BOARD.store + "-tab") || "layout"; } catch (e) {}
 renderLists(); renderProps(); render();
 (document.querySelector(`.tabs button[data-tab="${startTab}"]`) || document.querySelector(".tabs button")).click();
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { rasterCache.clear(); render(); });

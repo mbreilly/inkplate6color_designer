@@ -6,14 +6,22 @@ The schedule can be typed into the designer or read from a plain-text file at a 
 
 The 6COLOR panel can only redraw the whole screen (a 12 to 15 second refresh with flashing), so the clock is redrawn every few minutes rather than every minute: Weather tab → Time format → Redraw the clock every (1 to 30 minutes, 5 by default). The clock can also show the time of day in words instead (Early morning, Morning, Midday, Afternoon, Evening, Night, Late night, all editable). Then the screen only redraws when the words change, at midnight, when a schedule entry starts or ends, and when weather or the schedule is fetched. A WiFi status icon (bottom row by default) shows whether the board's last connection worked; it turns into a slashed icon in its own ink when it didn't.
 
+## Inkplate 6 (black and white) version
+
+`designer/inkplate6-designer.html` is the same designer for the Soldered Inkplate 6 (800 × 600, black and white), exporting the `Inkplate6Display` sketch. That panel can change just the pixels that differ, so the clock ticks every minute with a quick partial update (about half a second, no flashing). Every so often (20 quick updates by default, set in Clock & Weather → Time format) it does one full refresh to clear ghosting. Grays are drawn as dot patterns (light gray, gray, dark gray), and gallery photos use the panel's 8-gray mode, which only does full refreshes. In Arduino, pick **Soldered Inkplate6**.
+
+Partial updates and deep sleep: sleeping wipes the library's record of what's on the panel, so on each wake the sketch redraws the previous minute's screen from what it kept in RTC memory, passes it to `preloadScreen()`, then draws the new one and calls `partialUpdate(true)`.
+
 ## Folders
 
 - `designer/inkplate-designer.html`: the designer. Open it in a browser, no install or server needed.
 - `designer/designer.src.html`: the designer source. The firmware is inlined into it at build time.
-- `firmware/InkplateDisplay/`: the Arduino sketch the designer exports. `layout.h`, `fonts.h` and `secrets.h` in this folder are an example export.
+- `designer/inkplate6-designer.html`: the designer for the black-and-white Inkplate 6.
+- `firmware/InkplateDisplay/`: the Arduino sketch the 6COLOR designer exports. `layout.h`, `fonts.h` and `secrets.h` in this folder are an example export.
+- `firmware/Inkplate6Display/`: the same for the Inkplate 6.
 - `clock/InkplateClock/`: the earlier standalone clock (hand-written layout, no designer).
-- `tools/build_designer.py`: rebuilds `designer/inkplate-designer.html` from the source and firmware.
-- `tools/pixel-check/`: a host-side harness that runs the firmware drawing code on a PC so it can be compared pixel for pixel with the designer preview.
+- `tools/build_designer.py`: rebuilds both designers from the one source and each board's firmware.
+- `tools/pixel-check/`: a host-side harness (`extract.py <sketch>`, then build `harness.cpp` with `-I firmware/<sketch>`, plus `-DBW` for the Inkplate 6) that runs the firmware drawing code on a PC so it can be compared pixel for pixel with the designer preview.
 
 ## Using the designer
 
@@ -37,7 +45,7 @@ The 6COLOR panel has no partial refresh, so each update is a full refresh of abo
 
 ## Changing the firmware
 
-The designer embeds a copy of the firmware. After editing `firmware/InkplateDisplay/InkplateDisplay.ino` or `display_types.h`, rebuild the designer:
+The designer embeds a copy of the firmware. After editing either sketch's `.ino` or `display_types.h`, or `designer/designer.src.html`, rebuild the designers:
 
 ```
 python3 tools/build_designer.py
@@ -45,6 +53,6 @@ python3 tools/build_designer.py
 
 ## Secrets
 
-`firmware/InkplateDisplay/secrets.h` and `clock/InkplateClock/config.h` are committed with blank WiFi and API key values. Don't commit them once you've filled them in.
+`firmware/InkplateDisplay/secrets.h`, `firmware/Inkplate6Display/secrets.h` and `clock/InkplateClock/config.h` are committed with blank WiFi and API key values. Don't commit them once you've filled them in.
 
 Test-compiled against arduino-esp32 2.0.17 with InkplateLibrary 11.2.0 and ArduinoJson 7.4.2. It has not been run on hardware yet.
