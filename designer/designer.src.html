@@ -275,7 +275,8 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
           <div class="fields">
             <label class="field"><span>Redraw the clock every</span><select id="t-update"><option value="1">1 minute</option><option value="2">2 minutes</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option></select></label>
           </div>
-          <div class="fields" id="full-box" hidden><label class="field"><span>Full refresh after this many quick updates</span><input type="number" id="t-full" min="1" max="120"></label></div>
+          <div class="fields" id="full-box" hidden><label class="field"><span>Full refresh after this many quick updates</span><input type="number" id="t-full" min="1" max="120"></label>
+            <label class="check"><input type="checkbox" id="t-clean"> Clean the clock area on each update (less ghosting, about half a second longer)</label></div>
           <p class="note" id="update-note">The 6COLOR panel can only redraw the whole screen: each update is a full refresh of about 12–15 seconds with flashing, even when only the time changed. Redrawing less often means less flashing and longer battery life. The clock then changes on the hour and every N minutes after (with 5 minutes: 10:00, 10:05, 10:10…), and the device wakes early so each change shows up on time. Weather and schedule changes show at the next redraw.</p>
           </div>
         </div>
@@ -464,7 +465,7 @@ const DEFAULT_PARTS = [
 ];
 function exampleState() {
   return {
-    v: 7,
+    v: 8,
     previewDay: "",
     background: { ink: "white", image: null, imageName: "" },
     time: { hour24: false, ampm: true, style: "words", parts: DEFAULT_PARTS.map((p) => ({ ...p })) },
@@ -489,7 +490,7 @@ function exampleState() {
     ] },
     gallery: { enabled: true, images: [], defaultMinutes: 2, fit: "cover", fill: "white", dither: "fs", boost: 1.25,
       overlay: { id: "overlay", type: "clock", name: "Clock over photos", x: 576, y: 384, align: "right", font: { family: "sans", size: 40, weight: 700 }, color: "white", visible: true } },
-    timing: { mainMinutes: 10, weatherMinutes: 10, updateMinutes: 5, fullEvery: 20 },
+    timing: { mainMinutes: 10, weatherMinutes: 10, updateMinutes: 5, fullEvery: 10, cleanClock: true },
     weather: { zip: "19104", country: "US", units: "imperial", offsetHours: -4 },
     sample: { temp: 68, desc: "Partly cloudy", humidity: 54, city: "Philadelphia", volts: 4.05, wifi: true },
   };
@@ -781,7 +782,7 @@ if (BOARD.bw) {
   set("#preview-note", "The preview uses the same bitmap fonts the Inkplate will, in black and white. Grays are drawn as fine dot patterns, exactly as the screen will, and photos are shown in the panel's 8 grays. Play rotation runs one minute per second.");
   set("#drop-note", "Each photo is resized to 800×600 and dithered to the panel's 8 grays. Dithering and boost apply to every photo and can be changed any time.");
   set("#overlay-note", "Photos use the panel's gray mode, which can only do full refreshes. With the clock on, each photo redraws (with a flash) every time the clock changes. Turn it off and each photo stays put until its time is up.");
-  set("#update-note", "The Inkplate 6 changes just the pixels that differ (a quick update, about half a second, no flashing), so the clock can tick every minute. Quick updates leave faint ghosts over time, so every so often it does one full refresh (about a second, with a flash) to clean the screen. Weather and schedule changes show up right after they're fetched.");
+  set("#update-note", "The Inkplate 6 changes just the pixels that differ (a quick update, about half a second, no flashing), so the clock can tick every minute. Quick updates leave faint ghosts, worst with light text on a dark background, so the clock area is blanked before each new time and every so often it does one full refresh (about a second, with a flash) to clean the screen. Black text on white ghosts the least. Weather and schedule changes show up right after they're fetched.");
   $("#full-box").hidden = false;
 }
 document.querySelectorAll(".sk").forEach((e) => { e.textContent = BOARD.sketch; });
@@ -1363,7 +1364,8 @@ function bindStatic() {
   bind("#s-wifi", () => S.sample.wifi !== false, (v) => S.sample.wifi = v, "change");
   bind("#t-style", () => S.time.style || "time", (v) => { S.time.style = v; showTimeStyle(); }, "change");
   showTimeStyle(); renderParts();
-  bind("#t-full", () => S.timing.fullEvery || 20, (v) => S.timing.fullEvery = clamp(Math.round(Number(v)) || 20, 1, 120));
+  bind("#t-clean", () => S.timing.cleanClock !== false, (v) => S.timing.cleanClock = v, "change");
+  bind("#t-full", () => S.timing.fullEvery || 10, (v) => S.timing.fullEvery = clamp(Math.round(Number(v)) || 10, 1, 120));
   bind("#t-update", () => String(updateMinutes()), (v) => S.timing.updateMinutes = Number(v), "change");
   bind("#s-url", () => S.schedule.url, (v) => S.schedule.url = v.trim());
   bind("#s-refresh", () => S.schedule.refreshMinutes, (v) => S.schedule.refreshMinutes = clamp(Math.round(Number(v)) || 15, 1, 1440));
@@ -1491,7 +1493,9 @@ function merge(base, data) {
     if (!out.elements.some((e) => e.type === "wifi")) out.elements.splice(Math.max(0, out.elements.findIndex((e) => e.type === "updated")), 0, { ...base.elements.find((e) => e.id === "wifi") });
     out.v = 6;
   }
-  out.v = Math.max(out.v, 7);
+  // v8: the Inkplate 6 cleans the screen more often (every 10 quick updates, was 20).
+  if (out.v < 8 && out.timing.fullEvery === 20) out.timing.fullEvery = 10;
+  out.v = Math.max(out.v, 8);
   out.previewDay = "";
   return out;
 }
@@ -1621,7 +1625,9 @@ static const uint16_t WEATHER_MINUTES = ${S.timing.weatherMinutes};
 // The screen (and clock) is redrawn every UPDATE_MINUTES, on the hour and every N minutes after.
 static const uint16_t UPDATE_MINUTES = ${updateMinutes()};${BOARD.bw ? `
 // Quick (partial) updates between full refreshes, which clear ghosting.
-static const uint16_t FULL_REFRESH_EVERY = ${clamp(Math.round(Number(S.timing.fullEvery) || 20), 1, 120)};` : ""}
+static const uint16_t FULL_REFRESH_EVERY = ${clamp(Math.round(Number(S.timing.fullEvery) || 10), 1, 120)};
+// true: on each quick update, blank the clock area first, then draw the new time.
+#define CLEAN_CLOCK ${S.timing.cleanClock !== false ? "true" : "false"}` : ""}
 static const uint8_t BG_INK = ${bgC};
 static const char *const BG_IMAGE = ${S.background.image ? '"/bg.bin"' : "nullptr"};
 static const uint8_t GALLERY_FILL = ${fillC};
@@ -1689,7 +1695,7 @@ function readme(nFonts, nImages) {
   const sk = BOARD.sketch;
   const how = BOARD.bw ? `How updates work: the clock changes with a quick partial update (only the
 pixels that differ, about half a second, no flashing). After every
-${S.timing.fullEvery || 20} quick updates, and whenever the screen switches between the main
+${S.timing.fullEvery || 10} quick updates, and whenever the screen switches between the main
 screen and a photo, it does a full refresh to clear ghosting. The board
 sleeps between updates and wakes a little early so each new minute lands on
 time. Weather and internet time are fetched every ${S.timing.weatherMinutes} minutes, right after an

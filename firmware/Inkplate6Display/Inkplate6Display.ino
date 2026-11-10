@@ -526,6 +526,14 @@ const char *dayPartAt(int minuteOfDay)
     return t;
 }
 
+void clockText(char *buf, size_t n, const struct tm &now)
+{
+    if (CLOCK_WORDS)
+        snprintf(buf, n, "%s", dayPartAt(now.tm_hour * 60 + now.tm_min));
+    else
+        fmtTime(buf, n, now.tm_hour, now.tm_min, SHOW_AMPM);
+}
+
 void drawElement(const Element &el, const struct tm &now)
 {
     char buf[160];
@@ -535,10 +543,7 @@ void drawElement(const Element &el, const struct tm &now)
         drawSchedule(el, now);
         return;
     case EL_CLOCK:
-        if (CLOCK_WORDS)
-            snprintf(buf, sizeof(buf), "%s", dayPartAt(now.tm_hour * 60 + now.tm_min));
-        else
-            fmtTime(buf, sizeof(buf), now.tm_hour, now.tm_min, SHOW_AMPM);
+        clockText(buf, sizeof(buf), now);
         break;
     case EL_DATE:
         fill(buf, sizeof(buf), el.text, dateToken, now);
@@ -922,6 +927,33 @@ uint32_t leadSec(int screen)
     return (leadMs[screen >= 0] + 999) / 1000;
 }
 
+// Clean pass for quick updates: fills the box around each clock (old and new
+// text) with the background ink. Showing that first, then the new time, drives
+// every clock pixel twice and leaves far less ghosting. Returns false if no
+// clock text changed.
+bool blankClocks(const struct tm &before, const struct tm &after)
+{
+    bool any = false;
+    char a[64], b[64];
+    clockText(a, sizeof(a), before);
+    clockText(b, sizeof(b), after);
+    if (!strcmp(a, b))
+        return false;
+    for (int i = 0; i < ELEMENT_COUNT; i++)
+    {
+        const Element &el = ELEMENTS[i];
+        if (el.type != EL_CLOCK)
+            continue;
+        int wa = textWidth(el.font, a), wb = textWidth(el.font, b);
+        int la = el.x - (el.align == AL_CENTER ? wa / 2 : el.align == AL_RIGHT ? wa : 0);
+        int lb = el.x - (el.align == AL_CENTER ? wb / 2 : el.align == AL_RIGHT ? wb : 0);
+        int x0 = (la < lb ? la : lb) - 6, x1 = (la + wa > lb + wb ? la + wa : lb + wb) + 6;
+        fillColor(x0, el.y - 4, x1 - x0, el.font->ascent + el.font->descent + 8, BG_INK);
+        any = true;
+    }
+    return any;
+}
+
 // Draws the screen for a stretch into the display buffer, switching to the
 // 8-gray mode for a photo. Returns the screen actually drawn (-1 if the photo
 // couldn't be read and the main screen was drawn instead).
@@ -1000,6 +1032,11 @@ void setup()
     int shown = drawScreen(screen, local);
     if (quick && shown < 0)
     {
+        if (CLEAN_CLOCK && blankClocks(localTm(shownMinute), local))
+        {
+            display.partialUpdate(true); // everything new, with the clocks blanked
+            drawMain(local);
+        }
         display.partialUpdate(true);
         quickUpdates++;
     }

@@ -13,7 +13,9 @@ static const uint16_t WEATHER_MINUTES = 10;
 // The screen (and clock) is redrawn every UPDATE_MINUTES, on the hour and every N minutes after.
 static const uint16_t UPDATE_MINUTES = 1;
 // Quick (partial) updates between full refreshes, which clear ghosting.
-static const uint16_t FULL_REFRESH_EVERY = 20;
+static const uint16_t FULL_REFRESH_EVERY = 10;
+// true: on each quick update, blank the clock area first, then draw the new time.
+#define CLEAN_CLOCK true
 static const uint8_t BG_INK = INK_WHITE;
 static const char *const BG_IMAGE = nullptr;
 static const uint8_t GALLERY_FILL = INK_WHITE;
