@@ -1398,7 +1398,7 @@ void setup()
     {
         uint32_t &l = leadMs[shown >= 0];
         l = (l * 3 + millis() + 500) / 4;
-        Serial.printf("%s took %lu ms, lead now %lu ms\n", quick && shown < 0 ? "Quick update" : "Full refresh", millis(), l);
+        Serial.printf("%s took %lu ms, lead now %lu ms\n", quick && shown < 0 ? "Quick update" : "Full refresh", (unsigned long)millis(), (unsigned long)l);
     }
 
     // Weather, NTP and the schedule file happen after the update so they don't

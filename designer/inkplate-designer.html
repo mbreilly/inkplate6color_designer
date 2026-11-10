@@ -1296,7 +1296,7 @@ void setup()
     {
         uint32_t &l = leadMs[screen >= 0];
         l = (l * 3 + millis() + 1000) / 4;
-        Serial.printf("Refresh took %lu ms, lead now %lu ms\n", millis(), l);
+        Serial.printf("Refresh took %lu ms, lead now %lu ms\n", (unsigned long)millis(), (unsigned long)l);
     }
 
     // Weather, NTP and the schedule file happen after the refresh so they don't delay the clock.
