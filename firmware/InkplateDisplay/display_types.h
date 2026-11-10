@@ -1,6 +1,12 @@
 // Types shared by the generated layout.h and fonts.h. Made by Inkplate 6COLOR Designer.
 #pragma once
+#include <stddef.h>
 #include <stdint.h>
+#include <time.h>
+
+// Looks up one {token} for fill(). Declared here rather than in the .ino because
+// the Arduino build puts function prototypes above anything typedef'd in the sketch.
+typedef bool (*Lookup)(const char *name, char *out, size_t n, const struct tm &now);
 
 // One glyph of a designer font. Pixels are packed row by row, MSB first,
 // starting at byte `offset` of the font's bitmap. The bottom row sits `yoff`
@@ -28,7 +34,8 @@ enum ElementType
     EL_UPDATED,
     EL_TEXT,
     EL_SCHEDULE,
-    EL_BATTERY
+    EL_BATTERY,
+    EL_WIFI // icon: color = connected ink, highlightColor = no-WiFi ink, width = size
 };
 
 enum TextAlign
@@ -45,7 +52,7 @@ struct Element
     int16_t x, y;
     uint8_t align;
     const DFont *font;
-    uint8_t color;
+    uint8_t color;       // colors here and below are numbers into PATTERNS in layout.h
     const char *text;    // label text, or the format for date / weather / updated / battery
     const char *pending; // "updated" before the first weather fetch
     // schedule only: one line per entry, days at x, time at x + daysWidth, text at x + timeWidth
@@ -72,8 +79,27 @@ struct SchedEntry
     const char *text;
 };
 
+// A time of day for the words clock: shown from start (minutes after midnight)
+// until the next one starts.
+struct DayPart
+{
+    int16_t start;
+    const char *text;
+};
+
 struct Photo
 {
     const char *file; // on the microSD card
     uint16_t minutes;
+};
+
+// One line of a schedule file read from SCHEDULE_URL. "|" splits it into days, time
+// and text; with two parts the first goes under the days and times; with none it runs
+// the full width. "!" in front means the happening-now color, "#" in front leaves the
+// line out. Declared here for the same reason as Lookup.
+struct FileLine
+{
+    char days[48], when[48], what[128];
+    uint8_t cols; // 1, 2 or 3
+    bool hot;
 };
